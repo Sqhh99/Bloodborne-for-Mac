@@ -299,6 +299,48 @@ static void test_menu_keys(void) {
     free(image); use_keys=0; memset(keys,0,sizeof keys);
 }
 
+/* Scrolling a menu with the wheel. Hovering waits for the whole scroll, however the pointer
+ * moves meanwhile (a nudge of the hand or a move towards the item scrolled to), and comes back
+ * on a move once it has settled, or at a click. */
+static void test_menu_wheel_hover(void) {
+    assert(!runtime_menu_pointer_wheel_holds(0,500,500,0)); /* plain hover */
+    assert(runtime_menu_pointer_wheel_holds(1,500,500,0));  /* scrolling */
+    assert(runtime_menu_pointer_wheel_holds(1,503,502,0));  /* the hand's nudge */
+    assert(runtime_menu_pointer_wheel_holds(1,620,700,0));  /* moved on purpose meanwhile */
+    assert(runtime_menu_pointer_wheel_holds(0,620,700,0));  /* settled: no move yet */
+    assert(runtime_menu_pointer_wheel_holds(0,623,702,0));  /* a nudge */
+    assert(!runtime_menu_pointer_wheel_holds(0,620,710,0)); /* a move: hover again */
+    assert(!runtime_menu_pointer_wheel_holds(0,620,711,0));
+    assert(runtime_menu_pointer_wheel_holds(1,620,711,0));
+    assert(!runtime_menu_pointer_wheel_holds(1,620,711,1)); /* a click picks what it is on */
+    assert(!runtime_menu_pointer_wheel_holds(0,621,711,0));
+
+    /* Every step is a d-pad press of 2 pad reads (frames) and a release of 1, never merged. */
+    RuntimeMenuWheel w={0};
+    int64_t t=1000;
+    runtime_menu_wheel_add(&w,1,t);
+    runtime_menu_wheel_add(&w,1,t);
+    uint32_t seen[9];
+    for (int i=0;i<9;++i) seen[i]=runtime_menu_wheel_next(&w,t+=16);
+    static const uint32_t two[9]={BTN_DOWN,BTN_DOWN,0,BTN_DOWN,BTN_DOWN,0,0,0,0};
+    assert(!memcmp(seen,two,sizeof seen));
+    assert(runtime_menu_wheel_scrolling(&w,t) && !runtime_menu_wheel_scrolling(&w,t+400));
+    /* At most 2 steps wait; turning back drops the rest the other way. */
+    runtime_menu_wheel_add(&w,40,t);
+    assert(w.pending==2);
+    assert(runtime_menu_wheel_next(&w,t+=16)==BTN_DOWN && w.pending==1);
+    runtime_menu_wheel_add(&w,-1,t);
+    assert(w.pending==-1);
+    assert(runtime_menu_wheel_next(&w,t+=16)==BTN_DOWN); /* the step under way ends first */
+    assert(runtime_menu_wheel_next(&w,t+=16)==0);
+    assert(runtime_menu_wheel_next(&w,t+=16)==BTN_UP && w.pending==0);
+    /* The cursor stops with the wheel: steps 150 ms old are dropped. */
+    runtime_menu_wheel_clear(&w);
+    runtime_menu_wheel_add(&w,2,t);
+    t+=200;
+    assert(runtime_menu_wheel_next(&w,t)==0 && w.pending==0);
+}
+
 static void test_mouse_response(void) {
     uint8_t x=128,y=128;
     mouse_stick(0,0,&x,&y);
@@ -487,6 +529,7 @@ int main(void) {
     assert(pad_init()==0 && pad_open(1,0,0,NULL)==1);
     test_bindings();
     test_menu_keys();
+    test_menu_wheel_hover();
     test_mouse_response();
     test_wheel_pulses();
     test_launcher_tables();

@@ -143,6 +143,13 @@ int runtime_menu_pointer_game_menu(void); /* bit 0 the title menu, bit 1 a menu 
 int runtime_menu_pointer_wanted(void);
 int runtime_menu_pointer_choice(void); /* a list with several items has the input focus */
 void runtime_menu_pointer_list_update(uint64_t component, uint64_t input);
+int runtime_menu_pointer_wheel_holds(int scrolling, float x, float y, int clicked);
+/* The wheel's steps in a menu, pressed on the d-pad one per step (runtime_menu_pointer.c). */
+typedef struct { int pending, reads; uint32_t direction; int64_t event_ms, active_ms; } RuntimeMenuWheel;
+void runtime_menu_wheel_add(RuntimeMenuWheel *w, int steps, int64_t now_ms); /* + down, - up */
+void runtime_menu_wheel_clear(RuntimeMenuWheel *w);
+uint32_t runtime_menu_wheel_next(RuntimeMenuWheel *w, int64_t now_ms); /* once per pad read */
+int runtime_menu_wheel_scrolling(const RuntimeMenuWheel *w, int64_t now_ms);
 void runtime_menu_pointer_pad(uint32_t *buttons, uint8_t left_x, uint8_t left_y);
 int runtime_install_mouse_look(unsigned char *image, uint64_t size);
 int runtime_mouse_direct_active(void);

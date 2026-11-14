@@ -2637,3 +2637,27 @@ cursor and clicked through title → Play Offline → Continue, System → Envir
 (right button), the wheel moved a list, the inventory's cells follow the pointer; the key guide
 shows "↑↓ : 选择  E : 确定  ␣ : 返回" and the gate's HUD prompt "E 打开大门" (the atlas copy).
 All 20 icons the game's file names were found, and the one atlas.
+
+## 2026-11-14: the wheel in menus (fork, M6 24 GB, macOS 27.2.1)
+
+The owner's report: scrolling a list with the wheel (shops, options) kept selecting the items
+passing under the pointer. Two causes in `src/runtime_menu_pointer.c`: any pointer move counted as
+a hover, and the hand turning a wheel nudges the mouse a pixel or two, so each nudge took the
+cursor back to the item the list had just scrolled under the pointer (players also move the mouse
+on purpose while scrolling). And the wheel's steps were OR'ed into one pending press, held 50 ms
+with a 40 ms gap: notches between two presses merged, so fast turns lost steps.
+
+Now (docs/DESIGN_INPUT.md "The wheel in menus"): counted steps, a d-pad press per step by pad
+reads (2 down, 1 up), hover waiting for the scroll plus 300 ms, then a 6-pixel move. Title menu
+with the scripted pointer (`BB_MENU_POINTER_FILE`, pointer away from the items): 1, 2 and 3 steps
+moved the cursor exactly 1, 2 and 3 times, 50 ms (3 frames) apart, so the game takes 2-frame
+presses. Hover (items at y 650-690 and 700-750): a 1 px nudge 0.2 s after a step and a move onto
+the other item during 4 steps left the cursor where the wheel put it; after settling a 3 px
+nudge did nothing, a 15 px move selected the item.
+
+Owner's test with a plain USB optical mouse (notched wheel): far too fast, with acceleration;
+a slight nudge skipped several items. Cause: the first version turned macOS's accelerated
+deltas into up to 3 items per event and queued up to 6. Now one notch = one item whatever the
+delta, a queue of 2 dropped after 150 ms, trackpads one item per 60 points and 120 ms apart.
+`BB_MENU_POINTER_LOG=1` prints each wheel event's delta in the host for the next check.
+
