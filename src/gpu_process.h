@@ -17,6 +17,7 @@ void gpu_process_start(void);
 void gpu_process_stop(void);
 /* The shared control block while the host is up (for bbgpu_init_remote), else NULL. */
 void *gpu_process_shared(void);
+void gpu_process_publish_files(void);
 /* The renderer now runs in the host: from here on, losing the host ends the game. */
 void gpu_process_rendering(void);
 

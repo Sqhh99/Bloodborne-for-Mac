@@ -347,6 +347,14 @@ void gpu_process_stop(void) {
     stop_host();
 }
 
+/* Button prompts: the renderer knows the game's key guide icons from this file. Called once the
+ * game's folders are mounted, before the renderer starts in the host. */
+void gpu_process_publish_files(void) {
+    if (shared && runtime_file_translate("/app0/dvdroot_ps4/menu/common.tpf.dcx", shared->prompt_file,
+                                         sizeof shared->prompt_file))
+        shared->prompt_file[0] = 0;
+}
+
 void *gpu_process_shared(void) {
     pthread_mutex_lock(&mutex);
     void *result = alive ? shared : NULL;

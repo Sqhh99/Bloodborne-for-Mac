@@ -10,6 +10,7 @@
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "video_core/page_manager.h"
 #include "video_core/renderer_metal/mtl_draw.h"
+#include "video_core/renderer_metal/mtl_prompt_images.h"
 #include "video_core/renderer_vulkan/vk_bind_helper.h"
 #include "video_core/renderer_vulkan/vk_camera_motion.h"
 #include "video_core/renderer_vulkan/vk_constant_ring.h"
@@ -362,6 +363,8 @@ private:
     u64 motion_geometry{};    ///< vertex-stream identity of the current direct draw
     bool gbuffer_draw = false;
     std::unique_ptr<TemporalUpscaler> upscaler; // bbport: FSR (docs/upscaler.md)
+    /// bbport: the key guide icons of the device in use (button prompts).
+    std::unique_ptr<Metal::PromptImages> prompts;
     std::array<float, 2> draw_jitter{};         ///< viewport offset of the current draw, pixels
     std::array<float, 2> target_scale{1.0f, 1.0f}; ///< pass drawn into the upscaler's output-size images
     const bool host_markers_enabled;

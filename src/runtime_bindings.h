@@ -71,5 +71,9 @@ const char *runtime_bindings_pad_default(int input);
 const char *runtime_bindings_pad_name(int button);
 /* The ini key of an action ("bind_cross") and its default list ("E,Return,Keypad Enter"),
  * for logs and tests. */
+/* The prompt for an action's binding: 'K' a key or 'M' a mouse button with its short label
+ * (UTF-8; a chord as "Shift+Left"), 0 when it has neither. A binding without a held input comes
+ * before a chord; with prefer_mouse a mouse button before a key (the hand is on the mouse). */
+int runtime_bindings_prompt(int action, int prefer_mouse, char *label, int size);
 const char *runtime_bindings_key(int action);
 const char *runtime_bindings_default(int action);

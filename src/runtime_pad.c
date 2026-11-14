@@ -3,7 +3,7 @@
  * by the window thread (gpu/shim/window.cpp); here state is only sampled.
  *
  * Keyboard and mouse buttons (beside a gamepad): bbport.ini bind_ keys, runtime_bindings.c. The
- * defaults follow Dark Souls III: WASD moves (navigates only in menus), Space taps / holds
+ * defaults follow Dark Souls III: WASD moves (and moves through the game's menus), Space taps / holds
  * Circle for dodge / run, E interacts, Q locks on / backs out of menus, F transforms the weapon.
  * Bloodborne's blood vial uses V, leaving R for quick items; Ctrl / right click fires the gun.
  * Optional separate dodge / sprint bindings and custom controller mappings are still supported.
@@ -16,6 +16,7 @@
 #include "gpu/bbgpu.h"
 #include "runtime_bindings.h"
 #include "host/bbgpu_mouse_input.h"
+#include "host/bbgpu_pointer_input.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,6 +111,8 @@ static SDL_Gamepad *current_gamepad(void) {
 }
 static int mouse_look_active(void);
 static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions);
+static void *(*pad_shared)(void);
+static int mouse_moving(void);
 /* A stick axis from two opposite keys: neutral 128, `reach` towards the held side (both: 127). */
 static uint8_t key_axis(int negative, int positive, int reach) {
     const int v=128-(negative ? reach : 0)+(positive ? (reach>127 ? 127 : reach) : 0);
@@ -126,6 +129,7 @@ static uintptr_t menu_flow_address;
 void runtime_pad_set_image(unsigned char *image, uint64_t size) {
     static const unsigned char signature[]={0x55,0x48,0x89,0xe5,0x41,0x57};
     menu_flow_address=0;
+    runtime_menu_pointer_set_image(image,size);
     if (!image || size<MENU_FLOW_OFFSET+sizeof(uintptr_t) ||
         memcmp(image+MENU_LIST_UPDATE_OFFSET,signature,sizeof signature)) return;
     menu_flow_address=(uintptr_t)image+MENU_FLOW_OFFSET;
@@ -148,7 +152,12 @@ static int game_menu_active(void) {
     if (!menu_flow_address || !pad_read_memory(menu_flow_address,&flow,sizeof flow) ||
         !flow || flow>UINTPTR_MAX-0xb12 || !pad_read_memory(flow+0xa78,state,sizeof state)) return 0;
     memcpy(&menu,state+0x10,sizeof menu);
-    return !state[0x99] || menu!=0;
+    /* The title menu, or a menu with something to choose from (a list with several items has
+     * the input focus: runtime_menu_pointer.c). A message with one button and a pick-up notice
+     * are menu objects too, but the hunter moves and fights on behind them: the keys and the
+     * mouse must stay what they are in play (the d-pad there switched weapons and made blood
+     * bullets; Back was a dodge). */
+    return !state[0x99] || (menu!=0 && runtime_menu_pointer_choice());
 }
 int runtime_pad_menu_active(void) { return game_menu_active(); }
 /* The controller's buttons (bit per PAD_* button) and triggers as the game sees them, after
@@ -199,6 +208,113 @@ static int keyboard_circle(int dodge, int sprint, uint64_t now) {
     return sprint || now<dodge_pulse_until;
 }
 
+/* Button prompts (gpu/shim/bbport_button_prompts.cpp draws the game's key guide icons for the
+ * device in use): the device whose input came last. 0 a PlayStation pad (the game's own icons),
+ * 1 another gamepad (its labels), 2 the keyboard and mouse. The generation changes with the
+ * device, the pad's type and the Mouse camera setting; the labels go to the GPU host in the
+ * shared block. From bloodborne-mac's runtime_pad.c (bbport 0.6). */
+static int prompt_device=-1, prompt_look=-1;
+static SDL_GamepadType prompt_pad_type=SDL_GAMEPAD_TYPE_UNKNOWN;
+static uint32_t prompt_generation, prompt_published;
+static int stick_moved(uint8_t v) { return v<128-48 || v>128+48; }
+/* What a controller button is called on a pad that is not a PlayStation one. */
+static int pad_prompt(int input, SDL_GamepadType type, char *label, int size) {
+    const int nintendo=type==SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO ||
+                       type==SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT ||
+                       type==SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT ||
+                       type==SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR;
+    int button=-1;
+    for (int slot=0;slot<BIND_SLOTS && button<0;++slot) button=runtime_bindings_pad(input,slot);
+    switch (button) {
+    case PAD_CROSS: case PAD_CIRCLE: case PAD_SQUARE: case PAD_TRIANGLE: {
+        static const SDL_GamepadButton sdl[]={SDL_GAMEPAD_BUTTON_SOUTH,SDL_GAMEPAD_BUTTON_EAST,
+                                              SDL_GAMEPAD_BUTTON_WEST,SDL_GAMEPAD_BUTTON_NORTH};
+        static const char *const by_position[]={"A","B","X","Y"};
+        const int at=button==PAD_CROSS ? 0 : button==PAD_CIRCLE ? 1 : button==PAD_SQUARE ? 2 : 3;
+        const SDL_GamepadButtonLabel l=SDL_GetGamepadButtonLabelForType(type,sdl[at]);
+        snprintf(label,size,"%s",l==SDL_GAMEPAD_BUTTON_LABEL_A ? "A" : l==SDL_GAMEPAD_BUTTON_LABEL_B ? "B"
+                 : l==SDL_GAMEPAD_BUTTON_LABEL_X ? "X" : l==SDL_GAMEPAD_BUTTON_LABEL_Y ? "Y" : by_position[at]);
+        return 'F';
+    }
+    case PAD_L1: snprintf(label,size,"%s",nintendo ? "L" : "LB"); return 'S';
+    case PAD_R1: snprintf(label,size,"%s",nintendo ? "R" : "RB"); return 'S';
+    case PAD_L2: snprintf(label,size,"%s",nintendo ? "ZL" : "LT"); return 'S';
+    case PAD_R2: snprintf(label,size,"%s",nintendo ? "ZR" : "RT"); return 'S';
+    case PAD_L3: snprintf(label,size,"LS"); return 'C';
+    case PAD_R3: snprintf(label,size,"RS"); return 'C';
+    case PAD_OPTIONS: snprintf(label,size,"%s",nintendo ? "+" : "Menu"); return 'C';
+    case PAD_SELECT: snprintf(label,size,"%s",nintendo ? "-" : "View"); return 'C';
+    case PAD_MISC: snprintf(label,size,"Share"); return 'C';
+    case PAD_TOUCHPAD: snprintf(label,size,"Pad"); return 'C';
+    case PAD_PADDLE1: case PAD_PADDLE2: case PAD_PADDLE3: case PAD_PADDLE4:
+        snprintf(label,size,"P%d",button-PAD_PADDLE1+1); return 'C';
+    default: return 0; /* the d-pad: the game's icons fit any pad */
+    }
+}
+static void prompt_fill(BbGpuPrompts *out) {
+    /* Circle: the real button first (Space by default: it is Circle in menus and in play). */
+    static const int8_t keyboard[BBGPU_PROMPT_INPUTS][3]={
+        [BBGPU_PROMPT_CROSS]={BIND_CROSS,-1,-1}, [BBGPU_PROMPT_CIRCLE]={BIND_CIRCLE,BIND_DODGE,BIND_MENU_BACK},
+        [BBGPU_PROMPT_SQUARE]={BIND_SQUARE,-1,-1}, [BBGPU_PROMPT_TRIANGLE]={BIND_TRIANGLE,-1,-1},
+        [BBGPU_PROMPT_L1]={BIND_L1,-1,-1}, [BBGPU_PROMPT_L2]={BIND_L2,-1,-1},
+        [BBGPU_PROMPT_R1]={BIND_R1,-1,-1}, [BBGPU_PROMPT_R2]={BIND_R2,-1,-1},
+        [BBGPU_PROMPT_L3]={BIND_L3,-1,-1}, [BBGPU_PROMPT_R3]={BIND_R3,-1,-1},
+        [BBGPU_PROMPT_OPTIONS]={BIND_OPTIONS,-1,-1},
+        [BBGPU_PROMPT_TOUCH_LEFT]={BIND_TOUCH_LEFT,-1,-1}, [BBGPU_PROMPT_TOUCH_RIGHT]={BIND_TOUCH_RIGHT,-1,-1},
+        [BBGPU_PROMPT_UP]={BIND_DPAD_UP,-1,-1}, [BBGPU_PROMPT_DOWN]={BIND_DPAD_DOWN,-1,-1},
+        [BBGPU_PROMPT_LEFT]={BIND_DPAD_LEFT,-1,-1}, [BBGPU_PROMPT_RIGHT]={BIND_DPAD_RIGHT,-1,-1},
+        [BBGPU_PROMPT_MOVE_UP]={BIND_MOVE_FORWARD,-1,-1}, [BBGPU_PROMPT_MOVE_LEFT]={BIND_MOVE_LEFT,-1,-1},
+        [BBGPU_PROMPT_MOVE_DOWN]={BIND_MOVE_BACK,-1,-1}, [BBGPU_PROMPT_MOVE_RIGHT]={BIND_MOVE_RIGHT,-1,-1},
+        [BBGPU_PROMPT_LOOK_UP]={BIND_CAMERA_UP,-1,-1}, [BBGPU_PROMPT_LOOK_LEFT]={BIND_CAMERA_LEFT,-1,-1},
+        [BBGPU_PROMPT_LOOK_DOWN]={BIND_CAMERA_DOWN,-1,-1}, [BBGPU_PROMPT_LOOK_RIGHT]={BIND_CAMERA_RIGHT,-1,-1},
+    };
+    static const int8_t pad[BBGPU_PROMPT_INPUTS]={
+        [BBGPU_PROMPT_CROSS]=PAD_CROSS, [BBGPU_PROMPT_CIRCLE]=PAD_CIRCLE, [BBGPU_PROMPT_SQUARE]=PAD_SQUARE,
+        [BBGPU_PROMPT_TRIANGLE]=PAD_TRIANGLE, [BBGPU_PROMPT_L1]=PAD_L1, [BBGPU_PROMPT_L2]=PAD_L2,
+        [BBGPU_PROMPT_R1]=PAD_R1, [BBGPU_PROMPT_R2]=PAD_R2, [BBGPU_PROMPT_L3]=PAD_L3, [BBGPU_PROMPT_R3]=PAD_R3,
+        [BBGPU_PROMPT_OPTIONS]=PAD_OPTIONS, [BBGPU_PROMPT_TOUCH_LEFT]=PAD_TOUCHPAD, [BBGPU_PROMPT_TOUCH_RIGHT]=PAD_TOUCHPAD,
+        [BBGPU_PROMPT_UP]=PAD_UP, [BBGPU_PROMPT_DOWN]=PAD_DOWN, [BBGPU_PROMPT_LEFT]=PAD_LEFT, [BBGPU_PROMPT_RIGHT]=PAD_RIGHT,
+    };
+    memset(out,0,sizeof *out);
+    out->generation=prompt_generation; out->device=prompt_device; out->mouse_look=prompt_look>0;
+    for (int input=0;input<BBGPU_PROMPT_INPUTS;++input) for (int variant=0;variant<2;++variant) {
+        char *label=out->label[variant][input];
+        int kind=0;
+        if (prompt_device==2) {
+            for (int i=0;i<3 && !kind && keyboard[input][i]>=0;++i)
+                kind=runtime_bindings_prompt(keyboard[input][i],variant && prompt_look>0,label,BBGPU_PROMPT_LABEL);
+        } else if (prompt_device==1) {
+            if (input>=BBGPU_PROMPT_MOVE_UP) {
+                snprintf(label,BBGPU_PROMPT_LABEL,"%s",input<BBGPU_PROMPT_LOOK_UP ? "LS" : "RS"); kind='C';
+            } else kind=pad_prompt(pad[input],prompt_pad_type,label,BBGPU_PROMPT_LABEL);
+        }
+        out->kind[variant][input]=(uint8_t)kind;
+    }
+}
+static void prompt_note(SDL_Gamepad *g, int pad_active, int keyboard_active) {
+    int device=prompt_device;
+    const SDL_GamepadType type=g ? SDL_GetGamepadType(g) : SDL_GAMEPAD_TYPE_UNKNOWN;
+    const int playstation=type==SDL_GAMEPAD_TYPE_PS3 || type==SDL_GAMEPAD_TYPE_PS4 || type==SDL_GAMEPAD_TYPE_PS5;
+    if (keyboard_active) device=2;
+    else if (g && (pad_active || device<0)) device=playstation ? 0 : 1;
+    else if (device<0) device=2;
+    const int look=bbgpu_mouse_look_enabled()!=0;
+    if (device!=prompt_device || (device!=2 && type!=prompt_pad_type) || look!=prompt_look) {
+        prompt_device=device; prompt_look=look;
+        if (device!=2) prompt_pad_type=type;
+        ++prompt_generation;
+    }
+#ifdef __APPLE__
+    BbGpuShared *s=pad_shared ? (BbGpuShared *)pad_shared() : NULL;
+    if (s && prompt_published!=prompt_generation) {
+        static BbGpuPrompts set; /* 1.3 KiB: not on the game's stack */
+        prompt_fill(&set);
+        bbgpu_prompts_publish(&s->prompts,&set);
+        prompt_published=prompt_generation;
+    }
+#endif
+}
+
 static void sample_devices(PadData *d) {
     memset(d,0,sizeof(*d));
     d->left_x=d->left_y=d->right_x=d->right_y=128;
@@ -242,6 +358,8 @@ static void sample_devices(PadData *d) {
         // Back/Select on pads without a touch surface is a left-side click.
         if ((d->buttons & BTN_TOUCHPAD) && !d->touch_count) touch_click(d,0);
     }
+    const int pad_active=g && (d->buttons || d->l2>30 || d->r2>30 || d->touch_count || stick_moved(d->left_x) ||
+                               stick_moved(d->left_y) || stick_moved(d->right_x) || stick_moved(d->right_y));
     /* The keyboard works beside a controller: its buttons add to the pad's, and the movement /
      * camera keys take over a stick only while held (with a controller connected the keyboard used
      * to be ignored, so Enter could not press Play Offline). While Cmd is held the keys are Mac
@@ -250,9 +368,11 @@ static void sample_devices(PadData *d) {
     if (k && (k[SDL_SCANCODE_LGUI] || k[SDL_SCANCODE_RGUI])) k=NULL;
     uint64_t wheel_actions=0;
     const uint32_t mouse=mouse_inputs(k,&wheel_actions);
-    if (!k && !mouse && !wheel_actions) { dodge_was_down=0; return; }
+    if (!k && !mouse && !wheel_actions) { dodge_was_down=0; prompt_note(g,pad_active,mouse_moving()); return; }
     const uint64_t held=runtime_bindings_held(k,mouse)|wheel_actions;
+    prompt_note(g,pad_active,held!=0 || mouse_moving());
     const int menu=game_menu_active();
+    const int choice=menu && runtime_menu_pointer_choice(); /* the title before its list: not yet */
 #define HELD(a) ((held>>(a))&1)
     /* A menu opened by Esc must not close again while that same Esc is held. Q consumed as
      * Back must not turn into lock-on if the menu disappears before the key is released. */
@@ -275,12 +395,15 @@ static void sample_devices(PadData *d) {
     if (menu) {
         dodge_pulse_until=jump_start_us=0; dodge_was_down=HELD(BIND_DODGE);
         if (HELD(BIND_MENU_BACK) || HELD(BIND_DODGE) || HELD(BIND_SPRINT)) d->buttons|=BTN_CIRCLE;
-        /* WASD is an alias for the menu's arrows only here: never switch weapons while moving.
-         * Opposite keys cancel, just as a physical stick does. */
-        if (HELD(BIND_MOVE_FORWARD) && !HELD(BIND_MOVE_BACK)) d->buttons|=BTN_UP;
-        if (HELD(BIND_MOVE_BACK) && !HELD(BIND_MOVE_FORWARD)) d->buttons|=BTN_DOWN;
-        if (HELD(BIND_MOVE_LEFT) && !HELD(BIND_MOVE_RIGHT)) d->buttons|=BTN_LEFT;
-        if (HELD(BIND_MOVE_RIGHT) && !HELD(BIND_MOVE_LEFT)) d->buttons|=BTN_RIGHT;
+        /* The movement keys are the menu's arrows while there is something to move through (a
+         * list with several items has the input focus): the game's menus follow the d-pad only,
+         * the stick walks the hunter even then. Opposite keys cancel, as on a stick. */
+        if (choice) {
+            if (HELD(BIND_MOVE_FORWARD) && !HELD(BIND_MOVE_BACK)) d->buttons|=BTN_UP;
+            if (HELD(BIND_MOVE_BACK) && !HELD(BIND_MOVE_FORWARD)) d->buttons|=BTN_DOWN;
+            if (HELD(BIND_MOVE_LEFT) && !HELD(BIND_MOVE_RIGHT)) d->buttons|=BTN_LEFT;
+            if (HELD(BIND_MOVE_RIGHT) && !HELD(BIND_MOVE_LEFT)) d->buttons|=BTN_RIGHT;
+        }
     } else if (keyboard_circle(HELD(BIND_DODGE),HELD(BIND_SPRINT),d->timestamp)) d->buttons|=BTN_CIRCLE;
     if (HELD(BIND_TOUCH_LEFT)) touch_click(d,0);
     if (HELD(BIND_TOUCH_RIGHT)) touch_click(d,1);
@@ -288,9 +411,9 @@ static void sample_devices(PadData *d) {
     if (HELD(BIND_R2)) d->r2=255;
     /* Walk: the movement keys push the stick half way (full deflection always runs). */
     const int reach=HELD(BIND_WALK) ? 64 : 128;
-    if (!menu && (HELD(BIND_MOVE_LEFT) || HELD(BIND_MOVE_RIGHT)))
+    if (!choice && (HELD(BIND_MOVE_LEFT) || HELD(BIND_MOVE_RIGHT)))
         d->left_x=key_axis(HELD(BIND_MOVE_LEFT),HELD(BIND_MOVE_RIGHT),reach);
-    if (!menu && (HELD(BIND_MOVE_FORWARD) || HELD(BIND_MOVE_BACK)))
+    if (!choice && (HELD(BIND_MOVE_FORWARD) || HELD(BIND_MOVE_BACK)))
         d->left_y=key_axis(HELD(BIND_MOVE_FORWARD),HELD(BIND_MOVE_BACK),reach);
     if (mouse_look_active() && runtime_bindings_camera_keys_dpad()) {
         /* The mouse has the camera, so the camera keys are the d-pad: menus scroll with them and
@@ -327,8 +450,9 @@ static inline void mouse_stick(double vx,double vy,uint8_t *x,uint8_t *y) {
 }
 /* The GPU process's shared control block: gpu_process.c registers its accessor when it starts.
  * Without one (the unit tests link the runtime without gpu_process.c) there is no mouse. */
-static void *(*pad_shared)(void);
-void runtime_pad_set_shared(void *(*shared)(void)) { pad_shared=shared; runtime_mouse_set_shared(shared); }
+void runtime_pad_set_shared(void *(*shared)(void)) {
+    pad_shared=shared; runtime_mouse_set_shared(shared); runtime_menu_pointer_set_shared(shared);
+}
 /* Mouse look is on when the Mouse camera setting is (bbport.ini mouse_look, read at start; the
  * launcher sets it) or while the host window holds the cursor (switched on in the in-game menu).
  * The arrow keys are then the d-pad, from the title screen on. */
@@ -390,6 +514,16 @@ static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions) {
     return mouse;
 #else
     (void)keys;
+    return 0;
+#endif
+}
+/* The mouse turns the camera right now (the window holds it): the keyboard and mouse are in use. */
+static int mouse_moving(void) {
+#ifdef __APPLE__
+    const BbGpuShared *s=pad_shared ? (const BbGpuShared *)pad_shared() : NULL;
+    return s && __atomic_load_n(&s->mouse_captured,__ATOMIC_ACQUIRE) &&
+        (__atomic_load_n(&s->mouse_vx,__ATOMIC_RELAXED) || __atomic_load_n(&s->mouse_vy,__ATOMIC_RELAXED));
+#else
     return 0;
 #endif
 }
@@ -635,6 +769,7 @@ static void sample(PadData *d) {
     uint8_t *axes[4]={&d->left_x,&d->left_y,&d->right_x,&d->right_y};
     for (int i=0;i<4;++i) if (injected.stick[i]>=0) *axes[i]=(uint8_t)injected.stick[i];
     touch_ids(d);
+    runtime_menu_pointer_pad(&d->buttons,d->left_x,d->left_y);
     runtime_mac_settings_pad(&d->buttons);
 }
 

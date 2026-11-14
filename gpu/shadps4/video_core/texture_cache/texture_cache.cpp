@@ -6,6 +6,7 @@
 #include <string_view>
 #include <xxhash.h>
 
+#include "bbport_button_prompts.h"
 #include "bbport_toggles.h"
 #include "common/assert.h"
 #include "common/debug.h"
@@ -809,6 +810,21 @@ void TextureCache::RefreshImage(Image& image) {
     const u32 num_mips = image.info.resources.levels;
     const bool is_gpu_modified = True(image.flags & ImageFlagBits::GpuModified);
     const bool is_gpu_dirty = True(image.flags & ImageFlagBits::GpuDirty);
+    // bbport: the game's key guide icons, and the HUD atlas that holds some, are known by their
+    // bytes; the rasterizer then binds the port's icons for the device in use. Only textures of
+    // the candidates' sizes are hashed; the port's pixels never go into guest memory.
+    if (num_layers == 1 && num_mips == 1 && image.info.props.is_block && !is_gpu_modified) {
+        const auto* bytes = std::bit_cast<const u8*>(image.info.guest_address);
+        const u32 width = image.info.size.width, height = image.info.size.height;
+        image.prompt_icon = width == BbPrompts::GameIconSize && height == BbPrompts::GameIconSize &&
+                                    image.info.guest_size >= 1024
+                                ? u8(BbPrompts::IconOf(bytes, 1024))
+                                : 0;
+        image.prompt_atlas = u8(BbPrompts::AtlasOf(bytes, image.info.guest_size, width, height));
+        if (image.prompt_atlas) {
+            ++image.prompt_upload;
+        }
+    }
 
     BbStats::image_upload_bytes.fetch_add(image.info.guest_size, std::memory_order_relaxed);
     boost::container::small_vector<vk::BufferImageCopy, 14> image_copies;

@@ -37,6 +37,16 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   movement bindings press only the d-pad; elsewhere they move only the stick. `bind_menu_back`
   (Q) presses Circle only in menus, suppressing R3 until release. Escape switches to Back after
   its opening press is released. Missing/unsupported images disable contextual aliases.
+  **A menu, for these keys, is the title menu or a menu object with something to choose from**
+  (2026-11-14): a list with several items had the input focus in the last 250 ms, which the
+  list-update hook of `src/runtime_menu_pointer.c` sees. A menu object alone is not enough:
+  a message with one button ("Cannot be opened from this side") is a menu object with a focused
+  list of one item, and the hunter moves and acts behind it (measured at the locked gate by the
+  Central Yharnam lamp: the stick walks him with the message up). With the old rule the
+  movement keys pressed the d-pad there, which the message does not take: weapons switched, the
+  quick item cycled, W made blood bullets. In the game's real menus the reverse holds: the
+  d-pad moves the cursor and the stick still walks the hunter, so WASD must be the d-pad there.
+  Without the hook (another build, `BB_MENU_POINTER=0`) only the title menu counts.
 - **Optional separate dodge, run, jump** (`bind_dodge`, `bind_sprint`, both unbound by default;
   `keyboard_circle` in `src/runtime_pad.c`):
   Circle by what it does. The dodge is a 90 ms Circle press however long the key is held (held,
@@ -49,9 +59,7 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   modifier when it is let go, or the chord when another key or a mouse button is pressed with it.
 - `camera_keys_dpad` (default 0 since the arrow keys are the d-pad by default; it was 1): while
   the mouse has the camera, keys bound to the camera press the d-pad instead.
-- **Not ported from bloodborne-mac:** mouse pointer clicks in game menus. Its
-  key-as-stick ramps (`key_stick`) and
-  short-tap latch are not ported either. See MACOS_BACKLOG (Mac GUI).
+- **Not ported from bloodborne-mac:** its key-as-stick ramps (`key_stick`) and short-tap latch.
 - **Wheel:** physical direction, fractional trackpad steps accumulated. One accelerated OS event
   is one gesture. The latest event starts a 35 ms press / 35 ms release; extra same-direction
   steps during that interval are consumed, never queued or replayed. Reversing cancels the old
@@ -115,7 +123,59 @@ like a PlayStation one, and misses paddles).
   `launcher/Model/Bindings.swift`; `tests/test_pad.c` checks its tables against the C ones and
   tests the mapping on SDL's virtual controller (`test_controller_remap`).
 
+## The mouse in the game's menus (2026-11-14)
+
+Ported from bloodborne-mac's `gpu/games/bloodborne_menu_pointer.cpp` (bbport 0.6) to this
+port's two processes:
+
+- **Game process, `src/runtime_menu_pointer.c`:** `runtime_hooks.c` observes the entry of the
+  game's list update (0x1acff30: component, input; its 20-byte prologue moves into the stub).
+  For a focused list the hook hit-tests the pointer against the list's items by calling the
+  game's own functions (item provider, child lookup, bounds, world matrix: direct calls, this
+  code and the game are the same x86-64 System V code), moves the game's cursor to the item
+  under the pointer (hover acts on a move only, so a resting pointer does not fight the keys),
+  and turns a click into the confirm button, a slider's arrow or an option's side. The pad
+  thread (`runtime_menu_pointer_pad`) presses those for 50 ms each, the right button's Back and
+  the wheel's up / down, and publishes `menu_pointer` in the shared block. Guest memory is read
+  with the kernel's checked copy; every function's prologue is checked before the hook goes in.
+- **Host window, `gpu/shim/bbport_mouse.cpp`:** while `menu_pointer` is set the cursor is let
+  go (warped to the window's middle) and its position, in the game's 1920x1080 stage, its
+  clicks and wheel steps go to the game in `BbGpuPointerInput` (`host/bbgpu_pointer_input.h`,
+  shared block version 14). No click captures the mouse or attacks then. When the menu closes
+  the mouse is taken back for the camera if it was taken before, or if a menu was clicked with
+  Mouse camera on (so the title menu leads straight into mouse look).
+- A menu, for the pointer: the title menu, or a list with several items that had the focus in
+  the last 400 ms. Not a message with one button (see Menu context): the mouse stays the camera.
+- `BB_MENU_POINTER=0` off; `BB_MENU_POINTER_FILE=<file>` ("x y [click|right|up|down]" in stage
+  pixels, applied when the file changes) drives it in tests; `BB_MENU_POINTER_LOG=1` logs the
+  signals a menu is told by at each change.
+
+## Button prompts (2026-11-14)
+
+The game draws its key guide with 32x32 BC7 icons of PlayStation buttons (`KG_OK`, `KG_L1`, ...
+in `menu/common.tpf.dcx`); its HUD packs three of them into the atlas `MENU_Common_00091`
+("Examine", "Pick up", "Open"). Ported from bloodborne-mac (bbport 0.6):
+
+- **Game process:** `runtime_pad.c` tracks the device whose input came last (0 a PlayStation
+  pad, 1 another gamepad, 2 the keyboard and mouse) and publishes what each input is on it
+  (`BbGpuPrompts`: a kind and a short label per input, in two variants: a key first for key
+  clusters, a mouse button first for single icons while Mouse camera is on).
+  `runtime_bindings_prompt` names a binding: a plain one before a chord, an arrow key for the
+  d-pad (its prompts show in menus). Circle is its real button's key (Space), which is Back in
+  menus and the dodge in play alike. The path of the icon file as the game opens it (a mod's
+  copy included) goes into the shared block before the renderer starts.
+- **GPU host:** `gpu/shim/bbport_button_prompts.cpp` hashes the icons and the atlas from that
+  file and draws the replacement icons (key caps, a mouse with the button lit, another pad's
+  buttons) with stb_truetype and the embedded DejaVu Sans. `TextureCache::RefreshImage` marks a
+  texture that is one of the icons or the atlas by its bytes. `Rasterizer::BindTextures` then
+  binds, instead of the game's texture, one from `Metal::PromptImages`
+  (`renderer_metal/mtl_prompt_images.mm`): an RGBA8 texture per icon (64 px with mips), or a
+  copy of the atlas with the icons in its three cells. The copy is drawn from the game's BC7
+  texture on a command queue of its own 150 ms after the game's upload (the upload is on the
+  renderer's queue), so the HUD shows the game's icons for the first frames. The port's pixels
+  never go into guest memory. A PlayStation pad binds the game's textures as before.
+- `BB_BUTTON_PROMPTS=0` off; `BB_PROMPT_TRACE=1` lists the icons found.
+
 ## Not now
 
-Rebinding inside the in-game menu; keyboard glyphs in
-the game's prompts (it only has PlayStation ones).
+Rebinding inside the in-game menu.

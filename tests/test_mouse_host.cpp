@@ -80,5 +80,34 @@ int main() {
         }
     } while (!done.load(std::memory_order_acquire));
     writer.join();
-    std::puts("PASS: host mouse distance, wheel normalization, capture epoch and concurrent publication");
+
+    // A game menu is open: the cursor stays free, a click is the menu's (never the capture that
+    // gives the mouse to the camera, never an attack), the right button and the wheel count.
+    settings.mouse_look=true;
+    assert(!BbMouse::captured);
+    __atomic_store_n(&block.menu_pointer,1u,__ATOMIC_RELEASE);
+    const auto pointer=[] {
+        BbGpuPointerSample sample{};
+        assert(bbgpu_pointer_read(&block.pointer,&sample));
+        return sample;
+    };
+    SDL_Event button{}; button.type=SDL_EVENT_MOUSE_BUTTON_DOWN; button.button.button=SDL_BUTTON_LEFT;
+    assert(BbMouse::HandleEvent(nullptr,button) && !BbMouse::captured && !BbMouse::buttons);
+    assert(pointer().click_serial==1 && pointer().left_held==1 && pointer().click_ns!=0);
+    button.type=SDL_EVENT_MOUSE_BUTTON_UP;
+    assert(BbMouse::HandleEvent(nullptr,button) && pointer().left_held==0 && pointer().click_serial==1);
+    button.type=SDL_EVENT_MOUSE_BUTTON_DOWN; button.button.button=SDL_BUTTON_RIGHT;
+    assert(BbMouse::HandleEvent(nullptr,button) && pointer().back_serial==1 && pointer().click_serial==1);
+    BbMouse::wheel=0;
+    scroll.wheel.direction=SDL_MOUSEWHEEL_NORMAL; scroll.wheel.y=-3;
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().down_serial==1 && pointer().up_serial==0);
+    scroll.wheel.y=1;
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().up_serial==1);
+    const auto wheel_before=Read().wheel_serial; // the game's wheel bindings saw none of it
+    assert(wheel_before==Read().wheel_serial && !BbMouse::captured);
+    // The menu closed: a left click takes the mouse for the camera again.
+    __atomic_store_n(&block.menu_pointer,0u,__ATOMIC_RELEASE);
+    button.button.button=SDL_BUTTON_LEFT;
+    assert(BbMouse::HandleEvent(nullptr,button) && pointer().click_serial==1);
+    std::puts("PASS: host mouse distance, wheel normalization, capture epoch, concurrent publication, menu pointer");
 }

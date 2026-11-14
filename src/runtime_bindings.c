@@ -238,6 +238,60 @@ uint64_t runtime_bindings_wheel_actions(const bool *keys,uint32_t wheel) {
     return held;
 }
 
+/* A key's name for a prompt icon: short (an icon is a key cap), arrows as arrows. */
+static void prompt_name(uint16_t in, char *out, size_t size) {
+    static const struct { const char *sdl, *label; } names[]={
+        {"Left Shift","Shift"}, {"Right Shift","RShift"}, {"Left Ctrl","Ctrl"}, {"Right Ctrl","RCtrl"},
+        {"Left Alt","Alt"}, {"Right Alt","RAlt"}, {"Left Option","Alt"}, {"Right Option","RAlt"},
+        {"Return","Enter"}, {"Keypad Enter","Enter"},
+        {"Backspace","Bksp"}, {"Escape","Esc"}, {"CapsLock","Caps"}, {"Delete","Del"},
+        {"Insert","Ins"}, {"PageUp","PgUp"}, {"PageDown","PgDn"}, {"Up","\xe2\x86\x91"},
+        {"Down","\xe2\x86\x93"}, {"Left","\xe2\x86\x90"}, {"Right","\xe2\x86\x92"},
+    };
+    static const struct { uint16_t input; const char *label; } mouse[]={
+        {INPUT_MOUSE+SDL_BUTTON_LEFT,"Left"}, {INPUT_MOUSE+SDL_BUTTON_RIGHT,"Right"},
+        {INPUT_MOUSE+SDL_BUTTON_MIDDLE,"Middle"}, {INPUT_MOUSE+SDL_BUTTON_X1,"X1"},
+        {INPUT_MOUSE+SDL_BUTTON_X2,"X2"}, {INPUT_WHEEL_UP,"Wheel Up"}, {INPUT_WHEEL_DOWN,"Wheel Down"},
+    };
+    for (size_t i=0;i<sizeof mouse/sizeof *mouse;++i)
+        if (mouse[i].input==in) { snprintf(out,size,"%s",mouse[i].label); return; }
+    const char *name=SDL_GetScancodeName((SDL_Scancode)in);
+    if (!name || !*name) name="?";
+    for (size_t i=0;i<sizeof names/sizeof *names;++i)
+        if (!strcmp(name,names[i].sdl)) { name=names[i].label; break; }
+    if (!strncmp(name,"Keypad ",7)) snprintf(out,size,"Num%s",name+7);
+    else snprintf(out,size,"%s",name);
+}
+
+int runtime_bindings_prompt(int action, int prefer_mouse, char *label, int size) {
+    load_once();
+    if (action<0 || action>=BIND_COUNT || !label || size<2) return 0;
+    label[0]=0;
+    int key=-1,mouse=-1;
+    for (int pass=0;pass<2;++pass) /* plain bindings first, then chords */
+        for (int s=0;s<BIND_SLOTS;++s) {
+            const uint16_t in=bound[action][s];
+            if (!in || (bound_mod[action][s]!=0)!=pass) continue;
+            if (in>=INPUT_MOUSE) { if (mouse<0) mouse=s; }
+            else if (key<0) key=s;
+        }
+    /* The d-pad moves through the game's menus, where its prompts show: an arrow key says so
+     * better than the digit that switches a weapon in play. */
+    if (action>=BIND_DPAD_UP && action<=BIND_DPAD_RIGHT)
+        for (int s=0;s<BIND_SLOTS;++s) {
+            const uint16_t in=bound[action][s];
+            if (!bound_mod[action][s] && (in==SDL_SCANCODE_UP || in==SDL_SCANCODE_DOWN ||
+                                          in==SDL_SCANCODE_LEFT || in==SDL_SCANCODE_RIGHT)) { key=s; break; }
+        }
+    const int slot=mouse>=0 && (prefer_mouse || key<0) ? mouse : key;
+    if (slot<0) return 0;
+    char name[32],held[32]="";
+    prompt_name(bound[action][slot],name,sizeof name);
+    if (bound_mod[action][slot]) prompt_name(bound_mod[action][slot],held,sizeof held);
+    snprintf(label,(size_t)size,"%s%s%s",held,held[0] ? "+" : "",name);
+    return slot==mouse ? 'M' : 'K';
+}
+
 bool runtime_bindings_camera_keys_dpad(void) { load_once(); return camera_keys_dpad; }
 bool runtime_bindings_use_wheel(void) { load_once(); return use_wheel; }
 int runtime_bindings_pad(int input, int slot) {

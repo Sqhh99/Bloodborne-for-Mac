@@ -15,6 +15,25 @@ What each release of the macOS port changed, newest first. Moved here from the R
 - Scroll bursts no longer build a queue that keeps changing items after scrolling stops.
   Wheel up switches the right weapon, down the quick item; blood bullets remain 3 / Up so
   scrolling cannot accidentally spend health. Shift + wheel actions stay latched until release.
+- **The mouse points and clicks in the game's own menus** (title, inventory, shops, options):
+  the item under the pointer gets the game's cursor, a click confirms it (or presses the
+  slider's arrow or the side of the option it is on), the right button goes back, the wheel
+  moves up and down. While a menu is open the camera's mouse is let go, and taken back when it
+  closes. `BB_MENU_POINTER=0` turns it off.
+- **Key prompts for the device in use.** With the keyboard and mouse the game's hints
+  ("E 打开大门", the key guide under every menu, tutorials) show the bound key or mouse button
+  instead of PlayStation buttons; with an Xbox or Nintendo pad, that pad's labels; a PlayStation
+  pad keeps the game's own icons. They follow the device used last and your bindings.
+  `BB_BUTTON_PROMPTS=0` keeps the game's icons.
+- **Fixed: holding a movement key and pressing E at a message switched weapons, cycled the quick
+  item or made blood bullets.** A message with one button ("Cannot be opened from this side")
+  counted as a menu, where WASD pressed the d-pad; but the hunter still moves and acts behind
+  such a message, so the d-pad reached the game. WASD, Q and Esc now turn into menu keys only
+  while a menu with several items to choose from has the focus; behind a message they stay
+  movement, lock-on and Options, and the mouse stays the camera.
+- **Fixed: the name dialog showed "?" for Chinese, Japanese and Korean text** (the game's own
+  title "请输入姓名", and such names as they were typed): the overlay now adds a system font
+  with those glyphs the first time one is needed.
 - Default mouse sensitivity is 2.00. Both sensitivity sliders offer finer adjustment and a
   reset. Saved custom bindings and sensitivity values are kept; lock-on / unsupported camera
   modes retain a stick fallback.

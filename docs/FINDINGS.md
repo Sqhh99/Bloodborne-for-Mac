@@ -2610,3 +2610,30 @@ inside the game process (no Python at all), and it runs the game's code natively
 (bbcpu and the recompiler), so there is no Rosetta translation of its own binaries. The first
 is a port of several thousand lines (backlog, Performance); the second is a different
 architecture (decision 1 in CLAUDE.md).
+
+## 2026-11-14: menus, messages and the d-pad (fork, M6 24 GB, macOS 27.2.1)
+
+A player report: holding A and pressing E quickly "used items", once a blood vial. The HUD in
+the report's screenshot showed "+5" bullets: blood bullets, the d-pad's up. Measured in the
+game with a scripted pad (`BB_PAD_FILE`), the test pointer and frame snapshots
+(`BB_SNAPSHOT_TRIGGER`), at the locked gate by the Central Yharnam lamp, with
+`BB_MENU_POINTER_LOG=1` (the signals a menu is told by):
+
+| | title | menu object | focused list | several items | the stick |
+|---|---|---|---|---|---|
+| play | 0 | 0 | 0 | 0 | walks the hunter |
+| the message "Cannot be opened from this side" (one button) | 0 | 1 | 1 | 0 | walks the hunter |
+| the in-game menu (inventory) | 0 | 1 | 1 | 1 | walks the hunter; only the d-pad moves the cursor |
+| the title menu | 1 | 0 | 1 | 1 | (not tried) |
+
+So a menu object is not "the game takes the pad": behind a message the hunter moves and acts,
+and the message takes only Cross. The movement keys pressed the d-pad whenever a menu object
+existed (they must in real menus, which ignore the stick), so with a message up they switched
+weapons (A, D), cycled the quick item (S) and made blood bullets (W). Fixed by counting a menu
+only while a list with several items has the focus (docs/DESIGN_INPUT.md, Menu context).
+
+The same run checked the two ports from bloodborne-mac: the test pointer moved the game's
+cursor and clicked through title → Play Offline → Continue, System → Environment and back
+(right button), the wheel moved a list, the inventory's cells follow the pointer; the key guide
+shows "↑↓ : 选择  E : 确定  ␣ : 返回" and the gate's HUD prompt "E 打开大门" (the atlas copy).
+All 20 icons the game's file names were found, and the one atlas.

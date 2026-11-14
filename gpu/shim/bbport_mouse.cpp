@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bbport_mouse.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <time.h>
@@ -52,6 +53,34 @@ void Publish(BbGpuShared* s, float vx, float vy) {
     __atomic_store_n(&s->mouse_captured, captured ? 1u : 0u, __ATOMIC_RELEASE);
 }
 
+// The game's own menus (src/runtime_menu_pointer.c): while one is open the cursor is free and
+// points at its items. Where it is goes to the game in the stage's pixels (1920x1080, centred in
+// the frame shown and scaled by its height), with its clicks and wheel steps.
+BbGpuPointerSample pointer{};
+bool released_for_pointer = false; // the camera's mouse was let go for a menu: taken back after
+
+bool PointerWanted(const BbGpuShared* s) {
+    return __atomic_load_n(&s->menu_pointer, __ATOMIC_ACQUIRE) != 0 && !BbOverlay::CapturesInput();
+}
+
+void SetPointer(SDL_Window* window, BbGpuShared* s, float wx, float wy) {
+    int w = 0, h = 0;
+    SDL_GetWindowSize(window, &w, &h);
+    if (w <= 0 || h <= 0) {
+        return;
+    }
+    const auto& settings = BbSettings::Get();
+    const float aspect = settings.ultrawide_width > 0 && settings.ultrawide_height > 0
+                             ? float(settings.ultrawide_width) / float(settings.ultrawide_height)
+                             : 16.0f / 9.0f;
+    const float frame_h = std::min(float(h), float(w) / aspect);
+    const float scale = frame_h / 1080.0f;
+    pointer.x = (wx - float(w) * 0.5f) / scale + 960.0f;
+    pointer.y = (wy - float(h) * 0.5f) / scale + 540.0f;
+    pointer.inside = 1;
+    bbgpu_pointer_publish(&s->pointer, &pointer);
+}
+
 void SetCaptured(SDL_Window* window, BbGpuShared* s, bool on) {
     if (captured == on) {
         return;
@@ -87,6 +116,44 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
         last_pointer_ns = SDL_GetTicksNS();
         SetCursorHidden(false);
     }
+    // A game menu is open: the mouse points and clicks there (never the camera, never an attack).
+    if (!captured && PointerWanted(s)) {
+        switch (event.type) {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            SetPointer(window, s, event.button.x, event.button.y);
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                pointer.left_held = 1;
+                ++pointer.click_serial;
+                pointer.click_ns = MonotonicNs();
+                // Out of the menu the mouse turns the camera again without another click.
+                released_for_pointer = BbSettings::Get().mouse_look;
+            } else if (event.button.button == SDL_BUTTON_RIGHT) {
+                ++pointer.back_serial;
+            }
+            bbgpu_pointer_publish(&s->pointer, &pointer);
+            return true;
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            if (event.button.button == SDL_BUTTON_LEFT) {
+                pointer.left_held = 0;
+                bbgpu_pointer_publish(&s->pointer, &pointer);
+            }
+            return true;
+        case SDL_EVENT_MOUSE_WHEEL: {
+            const float delta = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
+            if (!std::isfinite(delta)) return true;
+            if (delta * wheel < 0) wheel = 0;
+            wheel += delta;
+            if (std::abs(wheel) >= 1.0f) {
+                ++(wheel > 0 ? pointer.up_serial : pointer.down_serial);
+                bbgpu_pointer_publish(&s->pointer, &pointer);
+                wheel = std::fmod(wheel, 1.0f);
+            }
+            return true;
+        }
+        default:
+            break;
+        }
+    }
     switch (event.type) {
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
         if (!captured) {
@@ -102,12 +169,17 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
         return true;
     case SDL_EVENT_MOUSE_BUTTON_UP:
         if (!captured) {
+            if (event.button.button == SDL_BUTTON_LEFT && pointer.left_held) {
+                pointer.left_held = 0;
+                bbgpu_pointer_publish(&s->pointer, &pointer);
+            }
             return false;
         }
         buttons &= ~SDL_BUTTON_MASK(event.button.button);
         return true;
     case SDL_EVENT_MOUSE_MOTION:
         if (!captured) {
+            SetPointer(window, s, event.motion.x, event.motion.y);
             return false;
         }
         motions[next_motion++ % motions.size()] = {event.motion.timestamp, event.motion.xrel,
@@ -155,6 +227,11 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
         return false;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         SetCaptured(window, s, false);
+        [[fallthrough]];
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        pointer.inside = 0;
+        pointer.left_held = 0;
+        bbgpu_pointer_publish(&s->pointer, &pointer);
         return false;
     default:
         return false;
@@ -170,6 +247,26 @@ void Update(SDL_Window* window) {
     if (captured && (!settings.mouse_look || BbOverlay::CapturesInput() ||
                      !(SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS))) {
         SetCaptured(window, s, false);
+    }
+    // The game's menus: the camera's mouse is let go for the pointer, which starts in the window's
+    // middle (not wherever the camera's mouse was left), and is taken back when they close.
+    const bool focused = (SDL_GetWindowFlags(window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+    if (PointerWanted(s)) {
+        if (captured) {
+            SetCaptured(window, s, false);
+            released_for_pointer = true;
+            int w = 0, h = 0;
+            SDL_GetWindowSize(window, &w, &h);
+            SDL_WarpMouseInWindow(window, float(w) * 0.5f, float(h) * 0.5f);
+            SetPointer(window, s, float(w) * 0.5f, float(h) * 0.5f);
+            last_pointer_ns = SDL_GetTicksNS();
+            SetCursorHidden(false);
+        }
+    } else if (released_for_pointer && !BbOverlay::CapturesInput()) {
+        released_for_pointer = false;
+        if (settings.mouse_look && focused && !captured) {
+            SetCaptured(window, s, true);
+        }
     }
     const u64 now = SDL_GetTicksNS();
     // The menu and the text dialog keep it (the menu consumes the mouse's events).

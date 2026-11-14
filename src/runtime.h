@@ -133,6 +133,17 @@ void runtime_pad_set_shared(void *(*shared)(void));
 void runtime_pad_set_image(unsigned char *image, uint64_t image_size);
 int runtime_pad_menu_active(void);
 void runtime_mouse_set_shared(void *(*shared)(void));
+/* runtime_menu_pointer.c: the mouse as a pointer in the game's menus. */
+int runtime_read_guest(uintptr_t address, void *out, size_t size); /* checked copy; 0: not mapped */
+void runtime_menu_pointer_set_image(unsigned char *image, uint64_t image_size);
+void runtime_menu_pointer_set_shared(void *(*shared)(void));
+int runtime_menu_pointer_ready(void);
+void runtime_menu_pointer_hooked(void);
+int runtime_menu_pointer_game_menu(void); /* bit 0 the title menu, bit 1 a menu is open */
+int runtime_menu_pointer_wanted(void);
+int runtime_menu_pointer_choice(void); /* a list with several items has the input focus */
+void runtime_menu_pointer_list_update(uint64_t component, uint64_t input);
+void runtime_menu_pointer_pad(uint32_t *buttons, uint8_t left_x, uint8_t left_y);
 int runtime_install_mouse_look(unsigned char *image, uint64_t size);
 int runtime_mouse_direct_active(void);
 const char *runtime_mouse_patch_conflict(uint64_t offset, const unsigned char *data, size_t size);

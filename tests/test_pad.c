@@ -167,6 +167,42 @@ static void test_bindings(void) {
     assert(!runtime_bindings_use_wheel());
     unlink(path);
     runtime_bindings_load(NULL);
+    /* Button prompts: what each action is on the keyboard and mouse, short enough for an icon. */
+    char label[BBGPU_PROMPT_LABEL];
+    assert(runtime_bindings_prompt(BIND_CROSS,0,label,sizeof label)=='K' && !strcmp(label,"E"));
+    assert(runtime_bindings_prompt(BIND_CROSS,1,label,sizeof label)=='K' && !strcmp(label,"E"));
+    assert(runtime_bindings_prompt(BIND_CIRCLE,1,label,sizeof label)=='K' && !strcmp(label,"Space"));
+    assert(runtime_bindings_prompt(BIND_R1,0,label,sizeof label)=='M' && !strcmp(label,"Left"));
+    /* A plain binding before a chord; with the hand on the mouse, its button before a key. */
+    assert(runtime_bindings_prompt(BIND_R2,0,label,sizeof label)=='M' && !strcmp(label,"X1"));
+    assert(runtime_bindings_prompt(BIND_L2,0,label,sizeof label)=='K' && !strcmp(label,"Ctrl"));
+    assert(runtime_bindings_prompt(BIND_L2,1,label,sizeof label)=='M' && !strcmp(label,"Right"));
+    assert(runtime_bindings_prompt(BIND_OPTIONS,1,label,sizeof label)=='K' && !strcmp(label,"Esc"));
+    /* The d-pad's prompts show in menus: an arrow key, not the digit or the wheel. */
+    assert(runtime_bindings_prompt(BIND_DPAD_UP,0,label,sizeof label)=='K' && !strcmp(label,"\xe2\x86\x91"));
+    assert(runtime_bindings_prompt(BIND_DPAD_DOWN,0,label,sizeof label)=='K' && !strcmp(label,"\xe2\x86\x93"));
+    assert(runtime_bindings_prompt(BIND_DPAD_DOWN,1,label,sizeof label)=='M' && !strcmp(label,"Wheel Down"));
+    assert(!runtime_bindings_prompt(BIND_DODGE,1,label,sizeof label) && !label[0]); /* unbound */
+    write_file(path,"bind_r2=Left Shift+Mouse Left\nbind_triangle=Left Ctrl+V\nbind_cross=Keypad +\n");
+    runtime_bindings_load(path);
+    assert(runtime_bindings_prompt(BIND_R2,1,label,sizeof label)=='M' && !strcmp(label,"Shift+Left"));
+    assert(runtime_bindings_prompt(BIND_TRIANGLE,0,label,sizeof label)=='K' && !strcmp(label,"Ctrl+V"));
+    assert(runtime_bindings_prompt(BIND_CROSS,0,label,sizeof label)=='K' && !strcmp(label,"Num+"));
+    unlink(path);
+    runtime_bindings_load(NULL);
+    /* The set the renderer gets: the keyboard's when nothing else was used, by input. */
+    prompt_device=-1; prompt_look=-1;
+    prompt_note(NULL,0,0);
+    static BbGpuPrompts set;
+    prompt_fill(&set);
+    assert(set.device==2 && set.generation==prompt_generation && !set.mouse_look);
+    assert(set.kind[1][BBGPU_PROMPT_CROSS]=='K' && !strcmp(set.label[1][BBGPU_PROMPT_CROSS],"E"));
+    assert(set.kind[1][BBGPU_PROMPT_CIRCLE]=='K' && !strcmp(set.label[1][BBGPU_PROMPT_CIRCLE],"Space"));
+    assert(set.kind[0][BBGPU_PROMPT_MOVE_LEFT]=='K' && !strcmp(set.label[0][BBGPU_PROMPT_MOVE_LEFT],"A"));
+    assert(set.kind[1][BBGPU_PROMPT_R1]=='M' && !strcmp(set.label[1][BBGPU_PROMPT_R1],"Left"));
+    const uint32_t before=prompt_generation;
+    prompt_note(NULL,0,1); /* still the keyboard: nothing to draw again */
+    assert(prompt_generation==before);
     memset(keys,0,sizeof keys);
     use_keys=0;
 }
@@ -182,6 +218,12 @@ static void test_menu_keys(void) {
     uintptr_t ptr=(uintptr_t)flow,menu=1;
     memcpy(image+MENU_FLOW_OFFSET,&ptr,sizeof ptr);
     flow[0xb11]=1;
+    /* A list of the game's as its update hook sees it (runtime_menu_pointer.c): +0x70 the item
+     * count; the second argument's first byte is nonzero while it has the input focus. */
+    unsigned char component[0x2b8]={0},focus=1;
+    int32_t items=5;
+    memcpy(component+0x70,&items,sizeof items);
+#define LIST_UPDATE() runtime_menu_pointer_list_update((uintptr_t)component,(uintptr_t)&focus)
     use_keys=1; runtime_bindings_load(NULL);
     runtime_pad_set_image(image,size-1);
     assert(!menu_flow_address);
@@ -192,12 +234,16 @@ static void test_menu_keys(void) {
     d=PRESS(SDL_SCANCODE_ESCAPE);
     assert(d.buttons==BTN_OPTIONS);
     memcpy(flow+0xa88,&menu,sizeof menu);
+    assert(!game_menu_active()); /* a menu object alone is not a menu to choose in */
+    runtime_menu_pointer_hooked();
+    LIST_UPDATE();
     assert(game_menu_active());
     d=PRESS(SDL_SCANCODE_ESCAPE);
     assert(d.buttons==BTN_OPTIONS); /* same press that opened the menu */
     (void)PRESS(SDL_SCANCODE_UNKNOWN);
     d=PRESS(SDL_SCANCODE_ESCAPE);
     assert(d.buttons==BTN_CIRCLE);
+    /* The movement keys are the menu's arrows, and the hunter stands. */
     d=PRESS(SDL_SCANCODE_W,SDL_SCANCODE_D);
     assert(d.buttons==(BTN_UP|BTN_RIGHT) && d.left_x==128 && d.left_y==128);
     d=PRESS(SDL_SCANCODE_A,SDL_SCANCODE_S);
@@ -214,8 +260,31 @@ static void test_menu_keys(void) {
     (void)PRESS(SDL_SCANCODE_UNKNOWN);
     d=PRESS(SDL_SCANCODE_Q);
     assert(d.buttons==BTN_R3);
+    /* A message with one button (or a pick-up notice): a menu object and a focused list of one
+     * item, but the hunter moves and fights on behind it. Holding A there and pressing E pressed
+     * the d-pad (weapons switched, blood bullets made): the keys must stay what they are in
+     * play. */
+    menu=1; memcpy(flow+0xa88,&menu,sizeof menu);
+    items=1; memcpy(component+0x70,&items,sizeof items);
+    usleep(270000); /* the several-item list's focus has run out */
+    LIST_UPDATE();
+    assert(!game_menu_active());
+    d=PRESS(SDL_SCANCODE_A,SDL_SCANCODE_E);
+    assert(d.buttons==BTN_CROSS && d.left_x==0 && d.left_y==128);
+    d=PRESS(SDL_SCANCODE_W,SDL_SCANCODE_D);
+    assert(!d.buttons && d.left_x==255 && d.left_y==0);
+    d=PRESS(SDL_SCANCODE_Q);
+    assert(d.buttons==BTN_R3); /* lock-on, not a dodge */
+    d=PRESS(SDL_SCANCODE_ESCAPE);
+    assert(d.buttons==BTN_OPTIONS);
+    (void)PRESS(SDL_SCANCODE_UNKNOWN);
+    menu=0; memcpy(flow+0xa88,&menu,sizeof menu);
+    items=5; memcpy(component+0x70,&items,sizeof items);
     flow[0xb11]=0;
     assert(game_menu_active()); /* title menu has no active in-game menu object */
+    d=PRESS(SDL_SCANCODE_S);
+    assert(!d.buttons && d.left_y==255); /* before its list shows there is nothing to move through */
+    LIST_UPDATE();
     d=PRESS(SDL_SCANCODE_S);
     assert(d.buttons==BTN_DOWN && d.left_y==128);
     ptr=1; memcpy(image+MENU_FLOW_OFFSET,&ptr,sizeof ptr);
@@ -226,6 +295,7 @@ static void test_menu_keys(void) {
     runtime_pad_set_image(image,size);
     assert(!menu_flow_address);
     runtime_pad_set_image(NULL,0);
+#undef LIST_UPDATE
     free(image); use_keys=0; memset(keys,0,sizeof keys);
 }
 

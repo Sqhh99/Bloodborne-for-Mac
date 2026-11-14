@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <string>
 #include <vector>
 #include "bbport_overlay.h"
 #include "bbport_settings.h"
@@ -75,6 +76,38 @@ double Changed(Target& t, u32 x0, u32 y0, u32 x1, u32 y1) {
         }
     }
     return double(changed) / double(size_t(x1 - x0) * (y1 - y0));
+}
+
+/// Bright pixels (text) in the frame's middle; BB_OVERLAY_TEST_BMP=<file>: that part as a BMP.
+size_t TextInk(Target& t, const char* dump_suffix) {
+    std::vector<u8> pixels(size_t(Width) * Height * 4);
+    [t.texture getBytes:pixels.data()
+            bytesPerRow:Width * 4
+             fromRegion:MTLRegionMake2D(0, 0, Width, Height)
+            mipmapLevel:0];
+    const u32 x0 = Width / 4, x1 = Width * 3 / 4, y0 = Height * 3 / 8, y1 = Height * 5 / 8;
+    size_t ink = 0;
+    for (u32 y = y0; y < y1; ++y) {
+        for (u32 x = x0; x < x1; ++x) {
+            const u8* p = &pixels[(size_t(y) * Width + x) * 4];
+            ink += p[0] > 170 && p[1] > 170 && p[2] > 170;
+        }
+    }
+    if (const char* path = std::getenv("BB_OVERLAY_TEST_BMP")) {
+        const u32 w = x1 - x0, h = y1 - y0, size = 54 + w * h * 4;
+        u8 header[54] = {'B', 'M'};
+        const auto put = [&](int at, u32 v) { std::memcpy(header + at, &v, 4); };
+        put(2, size); put(10, 54); put(14, 40); put(18, w); put(22, u32(-s32(h))); // top-down
+        header[26] = 1; header[28] = 32;
+        if (FILE* f = std::fopen((std::string{path} + dump_suffix).c_str(), "wb")) {
+            std::fwrite(header, 1, sizeof(header), f);
+            for (u32 y = y0; y < y1; ++y) {
+                std::fwrite(&pixels[(size_t(y) * Width + x0) * 4], 4, w, f);
+            }
+            std::fclose(f);
+        }
+    }
+    return ink;
 }
 
 SDL_Event Key(SDL_Keycode key, SDL_Keymod mod, bool down) {
@@ -257,6 +290,35 @@ int main() {
                    "the saved ini says upscaler=metalfx");
         }
         BbOverlay::HandleEvent(Key(SDLK_ESCAPE, SDL_KMOD_NONE, true));
+    }
+    // The game's text dialog in the game's language: the system font has no Chinese glyphs
+    // (they showed as "?"), so the overlay adds a font that does the first time one is needed.
+    {
+        @autoreleasepool {
+            id<MTLDevice> mtl = MTLCreateSystemDefaultDevice();
+            MTLTextureDescriptor* desc =
+                [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                   width:Width
+                                                                  height:Height
+                                                               mipmapped:NO];
+            desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+            desc.storageMode = MTLStorageModeShared;
+            Target t{[mtl newCommandQueue], [mtl newTextureWithDescriptor:desc]};
+            BbOverlay::SetTextPrompt(true, "?????", "??");
+            Present(t, true);
+            Present(t, true);
+            const size_t unknown = TextInk(t, ".unknown.bmp");
+            BbOverlay::SetTextPrompt(true, "\xe8\xaf\xb7\xe8\xbe\x93\xe5\x85\xa5\xe5\xa7\x93\xe5\x90\x8d",
+                                     "\xe7\x8c\x8e\xe4\xba\xba"); // 请输入姓名 / 猎人
+            Present(t, true); // the font is added before this frame; its glyphs may load during it
+            Present(t, true);
+            const size_t chinese = TextInk(t, ".chinese.bmp");
+            std::printf("text dialog: %zu bright pixels for \"?????\", %zu for the Chinese title\n", unknown,
+                        chinese);
+            Expect(unknown > 0 && chinese > unknown + unknown / 4,
+                   "the text dialog draws Chinese glyphs, not the missing-glyph sign");
+            BbOverlay::SetTextPrompt(false, "", "");
+        }
     }
     std::remove(config);
     if (failures) {

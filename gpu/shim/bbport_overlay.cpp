@@ -80,6 +80,9 @@ std::atomic<bool> held_sticks{false};
 std::atomic<bool> prompt_active{false};
 std::mutex prompt_mutex;
 std::string prompt_title, prompt_text;
+// Scripts the dialog's text needs that the overlay's font lacks: bit 0 Chinese and Japanese,
+// bit 1 Korean (window thread sets, present thread loads).
+std::atomic<int> cjk_wanted{0};
 
 bool IsMenuToggle(const SDL_KeyboardEvent& key) {
     if (key.key == SDLK_INSERT) {
@@ -1387,6 +1390,46 @@ void SetupFonts(ImGuiIO& io) {
                                    int(bb_font_ttf_end - bb_font_ttf), kBaseFontSize, &fallback);
 }
 
+/// Chinese, Japanese and Korean glyphs for the game's text dialog, from the system's own fonts
+/// (tens of MB each: read only when a dialog needs them, merged into the overlay's font).
+/// Present thread, between frames.
+void LoadCjkFonts(ImGuiIO& io) {
+    static int loaded = 0;
+    const int wanted = cjk_wanted.load(std::memory_order_relaxed) & ~loaded;
+    if (!wanted || io.Fonts->Fonts.empty()) {
+        return;
+    }
+    loaded |= wanted;
+#ifdef __APPLE__
+    const auto merge = [&](std::initializer_list<const char*> candidates) {
+        for (const char* path : candidates) {
+            if (FILE* probe = std::fopen(path, "rb")) {
+                std::fclose(probe);
+                ImFontConfig config;
+                config.MergeMode = true;
+                config.DstFont = io.Fonts->Fonts[0];
+                config.Flags |= ImFontFlags_NoLoadError;
+                if (io.Fonts->AddFontFromFileTTF(path, kBaseFontSize, &config)) {
+                    std::printf("Overlay: font %s (text dialog)\n", path);
+                    return;
+                }
+            }
+        }
+        std::printf("Overlay: no system font for the text dialog's script\n");
+    };
+    if (wanted & 1) {
+        // Hiragino Sans GB has Simplified Chinese, kana and the common kanji.
+        merge({"/System/Library/Fonts/Hiragino Sans GB.ttc", "/System/Library/Fonts/PingFang.ttc",
+               "/System/Library/Fonts/STHeiti Medium.ttc",
+               "/System/Library/Fonts/\xe3\x83\x92\xe3\x83\xa9\xe3\x82\xae\xe3\x83\x8e\xe8\xa7\x92"
+               "\xe3\x82\xb4\xe3\x82\xb7\xe3\x83\x83\xe3\x82\xaf W3.ttc"});
+    }
+    if (wanted & 2) {
+        merge({"/System/Library/Fonts/AppleSDGothicNeo.ttc"});
+    }
+#endif
+}
+
 /// UI scale follows the display height (1080p = 1).
 void ApplyScale(float display_height) {
     const float scale = std::max(display_height / 1080.0f, 0.75f);
@@ -1624,6 +1667,27 @@ bool Visible() {
 }
 
 void SetTextPrompt(bool active, const std::string& prompt, const std::string& text) {
+    // The game's title for the dialog is in the game's language ("请输入姓名"), and a name may be
+    // typed in any: the system font has no Chinese, Japanese or Korean glyphs (they showed as
+    // "?"), so a font that does is added the first time one is needed (LoadCjkFonts).
+    int scripts = 0;
+    for (const std::string* part : {&prompt, &text}) {
+        for (size_t i = 0; i < part->size();) {
+            const unsigned char lead = static_cast<unsigned char>((*part)[i]);
+            const int extra = lead >= 0xf0 ? 3 : lead >= 0xe0 ? 2 : lead >= 0xc0 ? 1 : 0;
+            unsigned code = lead & (extra == 3 ? 0x07 : extra == 2 ? 0x0f : extra == 1 ? 0x1f : 0x7f);
+            ++i;
+            for (int k = 0; k < extra && i < part->size(); ++k, ++i) {
+                code = code << 6 | (static_cast<unsigned char>((*part)[i]) & 0x3f);
+            }
+            const bool hangul = (code >= 0x1100 && code <= 0x11ff) || (code >= 0x3130 && code <= 0x318f) ||
+                                (code >= 0xac00 && code <= 0xd7af);
+            scripts |= hangul ? 2 : code >= 0x2e80 ? 1 : 0;
+        }
+    }
+    if (scripts) {
+        cjk_wanted.fetch_or(scripts, std::memory_order_relaxed);
+    }
     {
         std::scoped_lock lock{prompt_mutex};
         prompt_title = prompt;
@@ -1787,6 +1851,7 @@ void Render(void* command_buffer, void* target, u32 width, u32 height) {
     io.DeltaTime = ms > 0.0f && ms < 1000.0f ? ms / 1000.0f : 1.0f / 60.0f;
     ApplyScale(float(height));
 
+    LoadCjkFonts(io);
     MetalBackend::Frame(command_buffer, target, [&] {
         ImGui::NewFrame();
         if (menu_open) {
