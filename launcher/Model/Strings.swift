@@ -25,6 +25,12 @@ enum Strings {
         "Show launcher every time":
             (ja: "毎回ランチャーを表示",
              zh: "每次都显示启动器"),
+        "Hide launcher while playing":
+            (ja: "プレイ中はランチャーを隠す",
+             zh: "游戏运行时隐藏启动器"),
+        "The launcher window and its Dock icon disappear when the game starts and come back when the game ends.":
+            (ja: "ゲームの起動時にランチャーのウインドウと Dock のアイコンを隠し、ゲームの終了時に再び表示します。",
+             zh: "游戏启动时隐藏启动器窗口及其程序坞图标，游戏结束后重新显示。"),
         "Crash Report…":
             (ja: "クラッシュレポート…",
              zh: "崩溃报告…"),

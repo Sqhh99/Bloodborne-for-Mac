@@ -186,6 +186,8 @@ struct LauncherView: View {
                         Text(L("System")).tag(Language?.none)
                         ForEach(Language.allCases) { Text($0.name).tag(Optional($0)) }
                     }
+                    Toggle(L("Hide launcher while playing"), isOn: $model.config.hideWhilePlaying)
+                        .help(L("The launcher window and its Dock icon disappear when the game starts and come back when the game ends."))
                 }
                 Section(L("Locations")) {
                     FolderRow(title: L("Game folder"), path: model.config.gameDir?.path ?? L("Not chosen"),

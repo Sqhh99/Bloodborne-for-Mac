@@ -60,7 +60,11 @@ if [[ -f launch.conf ]]; then game=$(set -a; source ./launch.conf; printf '%s' "
 if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
     set_dir=$(mktemp -d)/Bloodborne.iconset
     mkdir -p "$set_dir"
-    for size in 16 32 128 256 512; do
+    # 256 and 512 pixels only: macOS 26/27 draw an old-style icon's own 16/32/128 images as a
+    # smaller square on a white plate (a white ring around it in Finder's list and small views).
+    # From the large images alone they scale it and round its corners like a native icon at
+    # every size (checked by rendering both at 32, 64 and 128 pixels, 2026-11-14).
+    for size in 256 512; do
         sips -z $size $size "$game/sce_sys/icon0.png" --out "$set_dir/icon_${size}x${size}.png" >/dev/null
         double=$((size * 2))
         sips -z $double $double "$game/sce_sys/icon0.png" --out "$set_dir/icon_${size}x${size}@2x.png" >/dev/null
@@ -77,4 +81,8 @@ codesign --force --sign - "$app"
 # the self-contained release bundle in package_app.sh is verified with --strict instead.
 codesign --verify --deep "$app"
 touch "$app"
+# The bundle was deleted and made again at the same path: Finder and the Dock keep the generic
+# icon they cached while it was incomplete until LaunchServices registers it afresh.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+[[ -x $lsregister ]] && "$lsregister" -f "$app" || true
 echo "Built $app"
