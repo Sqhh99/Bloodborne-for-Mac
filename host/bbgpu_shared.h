@@ -22,6 +22,7 @@
 #include <time.h>
 #include "../gpu/bbmac_settings.h"
 #include "bbgpu_mouse_input.h"
+#include "bbgpu_pointer_input.h"
 
 #ifdef __cplusplus
 #define BBGPU_ALIGNAS(n) alignas(n)
@@ -36,7 +37,7 @@
 #define BBGPU_GUEST_MAX UINT64_C(0xfc00000000)
 
 #define BBGPU_SHARED_MAGIC 0x31424742u /* "BGB1" */
-#define BBGPU_SHARED_VERSION 13u /* 13: lossless mouse displacement and bounded wheel pulses */
+#define BBGPU_SHARED_VERSION 14u /* 14: the pointer in game menus, button prompts */
 #define BBGPU_CONTROL_SIZE (UINT64_C(4) << 20) /* control block and rings */
 /* Command buffer copies (game side, at submit; the host parses these): the game may rewrite its
  * command buffers once the submit returns, before the host has parsed them. */
@@ -233,6 +234,16 @@ typedef struct {
     uint32_t mouse_wheel_up, mouse_wheel_down;
     /* Unfiltered displacement for native camera input, plus the latest scroll event. */
     BBGPU_ALIGNAS(BBGPU_CACHE_LINE) BbGpuMouseInput mouse_input;
+    /* The mouse as a pointer in the game's own menus (src/runtime_menu_pointer.c). The game sets
+     * menu_pointer while one of its menus is open; the host then lets the cursor go and publishes
+     * where it is and what it clicked (host/bbgpu_pointer_input.h). */
+    BBGPU_ALIGNAS(BBGPU_CACHE_LINE) uint32_t menu_pointer, pad2;
+    BbGpuPointerInput pointer;
+    /* Button prompts for the device in use (runtime_pad.c -> gpu/shim/bbport_button_prompts.cpp). */
+    BBGPU_ALIGNAS(BBGPU_CACHE_LINE) BbGpuPrompts prompts;
+    /* The game's key guide icons (menu/common.tpf.dcx as the game opens it, a mod's copy
+     * included): written by the game before the host starts. */
+    char prompt_file[1024];
 } BbGpuShared;
 
 #define BBGPU_SUBMIT_RING_OFFSET (UINT64_C(64) << 10)

@@ -48,7 +48,11 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   | L3 | X |
 
   In the game's menus WASD and the arrows navigate, E or Return confirms, and Q, Space or Esc
-  goes back. WASD never presses the d-pad during gameplay. Q only locks on outside menus.
+  goes back; **the mouse points and clicks there too** (right button: back, wheel: up and down).
+  WASD never presses the d-pad during gameplay, a message with one button included (the hunter
+  still moves behind it). Q only locks on outside menus.
+  **The game's key hints show your keys**: "E" on a door, the key guide under each menu, a
+  mouse with its button lit, or an Xbox / Nintendo pad's labels, for the device used last.
   V avoids the blood-vial conflict with Q (lock-on) and R (quick item); F transforms instead of
   changing the grip. The free camera follows mouse **distance**, independent of swipe speed,
   without a stick dead zone or maximum turn rate. Scroll bursts coalesce into short presses

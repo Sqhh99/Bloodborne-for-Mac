@@ -908,11 +908,18 @@ Each item: what was done for now, what the refinement is, and where it lives.
   benchmark's rarer error messages, crash reports and logs (read by maintainers). Traditional
   Chinese falls back to the Simplified text. A language change while the Mods & Cheats window
   is open shows there after it is opened again.
-- **Escape as "back" in the game's menus (2026-11-13).** With the Dark Souls III layout Escape
-  is Options: it opens the menu and closes it, and Space or Left Shift goes back one level.
-  bloodborne-mac makes Escape Circle while a game menu is open (its `bbgpu_pointer_wanted`);
-  this port has no signal for "a game menu is open". Find one (the menu's open flag in the
-  game, as `src/runtime_mac_settings.c` hooks the menu), then port that and its clicks in menus.
+- **The mouse in game menus and the key prompts: what is left (2026-11-14).** Both are ported
+  (docs/DESIGN_INPUT.md) and were checked with the test pointer and frame snapshots, not yet
+  with a real mouse by a player: the host's part (cursor let go and taken back, window to stage
+  coordinates on a Retina or 16:10 window, clicks) is covered by `tests/test_mouse_host.cpp`
+  only. Left: (1) a pick-up notice was not seen in a test (assumed like the one-button message:
+  no pointer, keys as in play); (2) a menu with a single item gets no pointer and no WASD
+  (Enter / E and the arrows work); (3) the port's own cursor image (bloodborne-mac draws one);
+  (4) all 22 icons are drawn again on the GPU thread when the device changes (keyboard to pad):
+  measure the hitch, cache by label; (5) the atlas copy waits 150 ms for the game's upload
+  rather than for the renderer's command buffer; (6) two icons (`KG_L_L`, `KG_L_R`) are not in
+  the game's file under those names: the d-pad's single left / right prompts keep the game's
+  icon; (7) the name dialog's own hint line and the overlay stay English.
 
 - **Fixed in 0.5.10: the old launcher stayed open after an update (#96, 2026-10-27).** AppKit
   refuses to quit while a sheet is attached: `NSApp.terminate` returns without asking the

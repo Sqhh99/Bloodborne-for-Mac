@@ -311,6 +311,27 @@ the live path (the startup patch breaks geometry there). Check screenshots when 
 - Screen capture is not permitted for the agent on this Mac: launcher pages were checked by
   rendering `LauncherView` off screen (NSHostingView `cacheDisplay`) from a scratch program.
 
+## State as of 2026-11-14 (fork, branch `menu-pointer-key-prompts`, PR on the fork)
+
+- **The mouse in the game's menus** (`src/runtime_menu_pointer.c`, hook in `runtime_hooks.c`,
+  host side `gpu/shim/bbport_mouse.cpp`, `host/bbgpu_pointer_input.h`; shared block version 14)
+  and **key prompts for the device in use** (`gpu/shim/bbport_button_prompts.cpp`,
+  `renderer_metal/mtl_prompt_images.mm`, labels from `runtime_pad.c` / `runtime_bindings_prompt`):
+  both ported from `../bloodborne-mac`, docs/DESIGN_INPUT.md. Checked in the game with the test
+  pointer (`BB_MENU_POINTER_FILE`) and frame snapshots; **not yet with a real mouse by the owner**.
+- **A menu, for the menu keys and the pointer, is the title menu or a focused list with several
+  items**, never a menu object alone: a one-button message is a menu object behind which the
+  hunter still acts, and WASD-as-d-pad there switched weapons and made blood bullets (the
+  owner's "A + E uses items" report; FINDINGS 2026-11-14). In real menus only the d-pad moves
+  the cursor (the stick walks the hunter), so WASD must stay the d-pad there.
+- **Name dialog:** the overlay adds a system CJK font (Hiragino Sans GB, AppleSDGothicNeo) the
+  first time a dialog's text needs one (`LoadCjkFonts`); the game's title for it is in the
+  game's language.
+- **Testing without screen capture:** `BB_SNAPSHOT_TRIGGER=<file>` (write a PNG path into it)
+  saves a frame; `BB_PAD_FILE` scripts the pad; `BB_MENU_POINTER_FILE` the pointer. The owner's
+  save was copied to `out/macdata/user/savedata` for this (a copy: the real one is untouched);
+  it continues at the Central Yharnam lamp, the locked gate a few steps away.
+
 ## Next steps (in order)
 
 1. **Native arm64 GPU process** (docs/DESIGN_NATIVE_GPU_PROCESS.md): M0 spike passed (1.75× on

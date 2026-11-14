@@ -20,6 +20,7 @@
 #include "video_core/buffer_cache/buffer.h"
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "video_core/renderer_metal/mtl_device.h"
+#include "video_core/renderer_metal/vk_to_mtl.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_depth_attachment.h"
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
@@ -73,6 +74,7 @@ Rasterizer::Rasterizer(Metal::Device& device_, Scheduler& scheduler_, Runtime& r
     object_motion = std::make_unique<ObjectMotion>(device, scheduler);
     camera_motion = std::make_unique<CameraMotion>(device, scheduler, texture_cache, runtime);
     camera_motion->SetObjectMotion(object_motion.get());
+    prompts = std::make_unique<Metal::PromptImages>(device);
     upscaler = std::make_unique<TemporalUpscaler>(device, scheduler, texture_cache, runtime,
                                                   *camera_motion, *scene_targets);
     if (!EmulatorSettings.IsNullGPU()) {
@@ -1518,6 +1520,7 @@ void Rasterizer::OnSubmit() {
     texture_cache.ProcessDownloadImages();
     texture_cache.RunGarbageCollector();
     runtime.TickFrame();
+    prompts->Update();
 }
 
 const PreparedStage* Rasterizer::FindPreparedStage(const Shader::Info& stage) const {
@@ -1608,7 +1611,7 @@ bool Rasterizer::TexturesBindableOnHelper(const Shader::Info& stage,
             return false;
         }
         if (image->binding.needs_rebind || !texture_cache.IsUpToDate(image_id) ||
-            scene_targets->Tracks(image->image_uid) ||
+            scene_targets->Tracks(image->image_uid) || image->prompt_icon || image->prompt_atlas ||
             (upscaler->Enabled() && upscaler->RedirectsSampled(image_id))) {
             return false;
         }
@@ -2570,6 +2573,32 @@ void Rasterizer::BindTextures(const Shader::Info& stage, const PreparedStage* pr
                 image_id, desc, memo_entry ? &memo_entry->view_memo : nullptr, !on_helper);
             const auto binding = image.binding;
 
+            // bbport: the game's key guides sample the port's icon for the device used last
+            // (a key cap, a mouse button, another pad's button): never the game's memory.
+            if ((image.prompt_icon || image.prompt_atlas) && !is_storage && prompts->Active()) {
+                const auto& view_info = desc.view_info;
+                const bool srgb = view_info.format == vk::Format::eBc7SrgbBlock;
+                const auto swizzle = Metal::VkToMtl::ComposeSwizzle(view_info.mapping, view_info.format);
+                const std::array<u8, 4> channels{u8(swizzle.r), u8(swizzle.g), u8(swizzle.b), u8(swizzle.a)};
+                void* guide = nullptr;
+                if (image.prompt_atlas) {
+                    if (view_info.type == AmdGpu::ImageType::Color2D) {
+                        guide = prompts->AtlasView(image.image_uid, image.prompt_atlas,
+                                                   image.prompt_upload, image.GetImage(), srgb, channels);
+                    }
+                } else if (view_info.type == AmdGpu::ImageType::Color2D ||
+                           view_info.type == AmdGpu::ImageType::Color2DArray) {
+                    guide = prompts->View(image.prompt_icon,
+                                          view_info.type == AmdGpu::ImageType::Color2DArray, srgb, channels);
+                }
+                if (guide) {
+                    image.usage.texture = 1u;
+                    image_infos.push_back({.texture = guide});
+                    set_ok = false;
+                    continue;
+                }
+            }
+
             // bbport: a proxied scene image sampled with normalized coordinates reads the proxy:
             // no resample to the native size (the native image is not touched).
             if (binding_proxy_ok[binding_index] && !is_storage && !binding.force_general &&
@@ -2763,6 +2792,11 @@ bool Rasterizer::BindTexturesFromSet(const Shader::Info& stage, const PreparedSt
             continue;
         }
         const auto& image = texture_cache.GetImage(entry.id);
+        // A key guide may read the port's icon instead (BindTextures decides).
+        if ((image.prompt_icon || image.prompt_atlas) && prompts->Active()) {
+            set.generation = ~0ull;
+            return false;
+        }
         // Proxy entries need a current proxy; native entries of a proxied image go through
         // BindTextures, which may sample the proxy instead.
         const bool proxies_on = !BbToggle::Disabled(BbToggle::SampleSceneProxies);

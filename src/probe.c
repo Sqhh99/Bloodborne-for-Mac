@@ -878,6 +878,7 @@ int main(int argc, char **argv) {
 #ifdef __APPLE__
         void *split=gpu_process_shared();
         if (!split) crash_exit("the GPU process is not running", GPU_PROCESS_EXIT_START);
+        gpu_process_publish_files();
         if (bbgpu_init_remote(&gpu,split)) crash_exit("the renderer could not start in the GPU process", 1);
         gpu_process_rendering();
         start_hang_watchdog();

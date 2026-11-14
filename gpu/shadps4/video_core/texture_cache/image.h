@@ -165,6 +165,11 @@ public:
     boost::container::static_vector<u64, 16> mip_hashes{};
     u64 lru_id{};
     u64 hash{};
+    /// bbport: button prompts (shim/bbport_button_prompts.h): the game's key guide icon this
+    /// image holds (IconOf), the HUD atlas it is (AtlasOf) and its uploads, known by its bytes.
+    u8 prompt_icon{};
+    u8 prompt_atlas{};
+    u32 prompt_upload{};
 
 private:
     static Common::IncrementalIdProvider<u64> global_image_uid;
