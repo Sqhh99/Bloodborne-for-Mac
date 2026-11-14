@@ -19,7 +19,7 @@ final class ModsWindow: NSObject, NSWindowDelegate {
         window = NSWindow(contentRect: NSRect(origin: .zero, size: ModsView.size),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
-        window.title = "Mods & Cheats"
+        window.title = L("Mods & Cheats")
         window.contentMinSize = ModsView.size
         window.contentView = NSHostingView(rootView: ModsView(model: model, launcher: launcher))
         window.isReleasedWhenClosed = false
@@ -123,7 +123,7 @@ final class ModsModel: ObservableObject {
         do {
             try ModsConfig(mods: list).write(to: files.modsConfig)
         } catch {
-            modsProblem = "Could not save \(files.modsConfig.lastPathComponent): \(error.localizedDescription)"
+            modsProblem = L("Could not save \(files.modsConfig.lastPathComponent): \(error.localizedDescription)")
         }
         refresh(then: then)
     }
@@ -150,10 +150,10 @@ final class ModsModel: ObservableObject {
     func removeSelected() {
         guard let name = selection else { return }
         let alert = NSAlert()
-        alert.messageText = "Move “\(name)” to the Trash?"
-        alert.informativeText = "The mod's folder goes to the Trash; you can put it back from there."
-        alert.addButton(withTitle: "Move to Trash")
-        alert.addButton(withTitle: "Cancel")
+        alert.messageText = L("Move “\(name)” to the Trash?")
+        alert.informativeText = L("The mod's folder goes to the Trash; you can put it back from there.")
+        alert.addButton(withTitle: L("Move to Trash"))
+        alert.addButton(withTitle: L("Cancel"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         trash(name)
     }
@@ -162,7 +162,7 @@ final class ModsModel: ObservableObject {
         do {
             try FileManager.default.trashItem(at: folder(name), resultingItemURL: nil)
         } catch {
-            modsProblem = "Could not move “\(name)” to the Trash: \(error.localizedDescription)"
+            modsProblem = L("Could not move “\(name)” to the Trash: \(error.localizedDescription)")
             return
         }
         selection = nil
@@ -187,8 +187,8 @@ final class ModsModel: ObservableObject {
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = [.folder, .zip]
-        panel.message = "Choose a mod: its folder or a .zip. It is copied into the mods folder."
-        panel.prompt = "Add"
+        panel.message = L("Choose a mod: its folder or a .zip. It is copied into the mods folder.")
+        panel.prompt = L("Add")
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
         let (sources, modsDir) = (panel.urls, files.mods)
         importing = true
@@ -215,15 +215,15 @@ final class ModsModel: ObservableObject {
     /// The layout check ran with the report: a folder mods.py cannot load is offered to the Trash.
     private func reviewImported(_ added: [String], problems: [String]) {
         if !problems.isEmpty {
-            modsProblem = "Not added: " + problems.joined(separator: "; ")
+            modsProblem = L("Not added: ") + problems.joined(separator: "; ")
         }
         for name in added {
             guard let error = mods.first(where: { $0.name == name })?.error else { continue }
             let alert = NSAlert()
-            alert.messageText = "“\(name)” can't be loaded as a mod"
-            alert.informativeText = error + "\n\nA mod holds the game's folders (dvdroot_ps4, or chr, parts, map... directly). Mods that replace eboot.bin, sce_module or sce_sys are refused."
-            alert.addButton(withTitle: "Move to Trash")
-            alert.addButton(withTitle: "Keep")
+            alert.messageText = L("“\(name)” can't be loaded as a mod")
+            alert.informativeText = error + "\n\n" + L("A mod holds the game's folders (dvdroot_ps4, or chr, parts, map... directly). Mods that replace eboot.bin, sce_module or sce_sys are refused.")
+            alert.addButton(withTitle: L("Move to Trash"))
+            alert.addButton(withTitle: L("Keep"))
             if alert.runModal() == .alertFirstButtonReturn { trash(name) }
         }
         if let last = added.last, mods.contains(where: { $0.name == last }) { selection = last }
@@ -280,7 +280,7 @@ final class ModsModel: ObservableObject {
             try selection.write(to: files.patchesConfig)
             external = external.map { var p = $0; if p.key == key { p.enabled = on }; return p }
         } catch {
-            patchesProblem = "Could not save \(files.patchesConfig.lastPathComponent): \(error.localizedDescription)"
+            patchesProblem = L("Could not save \(files.patchesConfig.lastPathComponent): \(error.localizedDescription)")
         }
         refresh()
     }
@@ -301,9 +301,9 @@ struct ModsView: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $page) {
-                Text("Mods").tag(Page.mods)
-                Text("Cheats & Tweaks").tag(Page.cheats)
-                Text("Patch Files").tag(Page.patches)
+                Text(L("Mods")).tag(Page.mods)
+                Text(L("Cheats & Tweaks")).tag(Page.cheats)
+                Text(L("Patch Files")).tag(Page.patches)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -334,7 +334,7 @@ struct ModsView: View {
 
     private var modsPage: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Mods are merged when the game starts, without changing the game files. Mods lower in the list load later and win when two replace the same file. Drag to reorder.")
+            Text(L("Mods are merged when the game starts, without changing the game files. Mods lower in the list load later and win when two replace the same file. Drag to reorder."))
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             problem(model.modsProblem)
@@ -343,7 +343,7 @@ struct ModsView: View {
                     ModRow(mod: mod, enabled: Binding(get: { mod.enabled }, set: { model.setEnabled(mod.name, $0) }))
                         .tag(mod.name)
                         .contextMenu {
-                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([model.folder(mod.name)]) }
+                            Button(L("Show in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([model.folder(mod.name)]) }
                         }
                 }
                 .onMove { model.move(fromOffsets: $0, toOffset: $1) }
@@ -351,24 +351,24 @@ struct ModsView: View {
             .listStyle(.bordered(alternatesRowBackgrounds: true))
             .overlay {
                 if model.mods.isEmpty {
-                    Text("No mods yet. Add a mod's folder or .zip, or put mod folders in the mods folder.")
+                    Text(L("No mods yet. Add a mod's folder or .zip, or put mod folders in the mods folder."))
                         .foregroundStyle(.secondary).multilineTextAlignment(.center).padding()
                 }
             }
             HStack {
-                Button("Add Mod…", action: model.addMods).disabled(model.importing)
+                Button(L("Add Mod…"), action: model.addMods).disabled(model.importing)
                 if model.importing { ProgressView().controlSize(.small) }
-                Button("Remove…", action: model.removeSelected).disabled(model.selection == nil)
-                Button("Show in Finder", action: model.showInFinder).disabled(model.selection == nil)
+                Button(L("Remove…"), action: model.removeSelected).disabled(model.selection == nil)
+                Button(L("Show in Finder"), action: model.showInFinder).disabled(model.selection == nil)
                 Button { if let s = model.selection { model.move(s, by: -1) } } label: { Image(systemName: "chevron.up") }
-                    .help("Load earlier").disabled(!model.canMove(by: -1))
+                    .help(L("Load earlier")).disabled(!model.canMove(by: -1))
                 Button { if let s = model.selection { model.move(s, by: 1) } } label: { Image(systemName: "chevron.down") }
-                    .help("Load later (wins conflicts)").disabled(!model.canMove(by: 1))
+                    .help(L("Load later (wins conflicts)")).disabled(!model.canMove(by: 1))
                 Spacer()
-                Button("Open Mods Folder", action: model.openModsFolder)
+                Button(L("Open Mods Folder"), action: model.openModsFolder)
             }
             if !model.conflicts.isEmpty {
-                Text("Conflicts").font(.headline)
+                Text(L("Conflicts")).font(.headline)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(model.conflicts) { conflict in
@@ -388,7 +388,7 @@ struct ModsView: View {
     private var cheatsPage: some View {
         Form {
             if launcher.running {
-                Text("The game is running: these apply at the next start, change them once it has ended.")
+                Text(L("The game is running: these apply at the next start, change them once it has ended."))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let problem = model.patchesProblem {
@@ -397,7 +397,7 @@ struct ModsView: View {
             ForEach(Cheats.grouped(model.cheats), id: \.group) { entry in
                 Section(entry.group) {
                     if entry.group == "Cheats" {
-                        Text("Cheats change the game's code. Your save is backed up before the first launch with a new set of mods or cheats.")
+                        Text(L("Cheats change the game's code. Your save is backed up before the first launch with a new set of mods or cheats."))
                             .font(.caption).foregroundStyle(.orange)
                     }
                     ForEach(entry.cheats) { cheat in
@@ -415,7 +415,7 @@ struct ModsView: View {
                 }
             }
             Section {
-                Text("Applies at the next start. Options that can't be combined turn each other off.")
+                Text(L("Applies at the next start. Options that can't be combined turn each other off."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -426,14 +426,14 @@ struct ModsView: View {
 
     private var patchesPage: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Patches from other sources' patch files, applied at the next start. Only patches for app version 01.09 (the version this port runs) are listed.")
+            Text(L("Patches from other sources' patch files, applied at the next start. Only patches for app version 01.09 (the version this port runs) are listed."))
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             problem(model.patchesProblem)
             if model.external.isEmpty {
                 VStack(spacing: 8) {
-                    Text("No patch files").font(.headline)
-                    Text("Put shadPS4 or GoldHEN patch files (.xml) for Bloodborne, app version 01.09, in the patches folder: their patches show up here to turn on or off. The port's own patches (graphics, frame rate and the cheats) are built in.")
+                    Text(L("No patch files")).font(.headline)
+                    Text(L("Put shadPS4 or GoldHEN patch files (.xml) for Bloodborne, app version 01.09, in the patches folder: their patches show up here to turn on or off. The port's own patches (graphics, frame rate and the cheats) are built in."))
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -459,7 +459,7 @@ struct ModsView: View {
             }
             HStack {
                 Spacer()
-                Button("Open Patches Folder", action: model.openPatchesFolder)
+                Button(L("Open Patches Folder"), action: model.openPatchesFolder)
             }
         }
         .padding()
@@ -478,7 +478,7 @@ private struct ModRow: View {
                 if let error = mod.error {
                     Text(error).font(.caption).foregroundStyle(.red).lineLimit(2).help(error)
                 } else {
-                    Text(mod.files == 1 ? "1 file" : "\(mod.files) files").font(.caption).foregroundStyle(.secondary)
+                    Text(mod.files == 1 ? L("1 file") : L("\(mod.files) files")).font(.caption).foregroundStyle(.secondary)
                 }
             }
         }

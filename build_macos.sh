@@ -96,6 +96,8 @@ if [[ -f $ARM64_PREFIX/lib/pkgconfig/sdl3.pc ]]; then
 else
     echo "Skipped out/bbgpu-host: no arm64 dependencies (BB_DEPS_ARCH=arm64 bash scripts/macos/bootstrap_deps.sh)"
 fi
+# run.sh builds again only when a source is newer than this stamp.
+touch out/.built
 if [[ ${1:-} == --test ]]; then
     python3 tests/test_launcher_stop.py
     "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_pad.c src/runtime_bindings.c src/runtime_host.c "${libraries[@]}" -Wl,-rpath,"$PREFIX/lib" -o out/pad-test

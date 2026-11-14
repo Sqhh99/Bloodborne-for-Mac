@@ -188,11 +188,11 @@ enum Cheats {
 
     /// The main window's line next to its Mods & Cheats… button.
     static func summary(mods: Int, cheats: Int) -> String {
-        if mods == 0 && cheats == 0 { return "No mods or cheats" }
+        if mods == 0 && cheats == 0 { return L("No mods or cheats") }
         var parts: [String] = []
-        if mods > 0 { parts.append(mods == 1 ? "1 mod" : "\(mods) mods") }
-        if cheats > 0 { parts.append(cheats == 1 ? "1 cheat" : "\(cheats) cheats") }
-        return parts.joined(separator: " · ") + " on"
+        if mods > 0 { parts.append(mods == 1 ? L("1 mod") : L("\(mods) mods")) }
+        if cheats > 0 { parts.append(cheats == 1 ? L("1 cheat") : L("\(cheats) cheats")) }
+        return L("\(parts.joined(separator: " · ")) on")
     }
 }
 

@@ -7,11 +7,11 @@ struct UpdateBadge: View {
 
     var body: some View {
         if let update = updater.available {
-            Button("Version \(update.version.text) is available") { updater.showing = true }
+            Button(L("Version \(update.version.text) is available")) { updater.showing = true }
                 .buttonStyle(.link)
                 .font(.caption)
         } else {
-            Text("Version \(updater.currentText)").font(.caption).foregroundStyle(.secondary)
+            Text(L("Version \(updater.currentText)")).font(.caption).foregroundStyle(.secondary)
                 .textSelection(.enabled)
         }
     }
@@ -26,11 +26,11 @@ struct UpdateView: View {
         VStack(alignment: .leading, spacing: 12) {
             content
             Divider()
-            Toggle("Check for updates automatically", isOn: Binding(
+            Toggle(L("Check for updates automatically"), isOn: Binding(
                 get: { model.config.checkUpdates == true }, set: { model.setUpdatePreference(automatic: $0) }))
-            Toggle("Include test builds", isOn: Binding(
+            Toggle(L("Include test builds"), isOn: Binding(
                 get: { model.config.testBuilds }, set: { model.setUpdatePreference(testBuilds: $0) }))
-                .help("Also offer pre-releases and test builds: early fixes that may not be finished.")
+                .help(L("Also offer pre-releases and test builds: early fixes that may not be finished."))
             buttons
         }
         .padding(20)
@@ -42,18 +42,18 @@ struct UpdateView: View {
         case .idle, .checking:
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
-                Text("Checking for updates…")
+                Text(L("Checking for updates…"))
             }
         case .upToDate:
-            Text("You're up to date").font(.headline)
-            Text("Bloodborne \(updater.currentText) is the newest version available.")
+            Text(L("You're up to date")).font(.headline)
+            Text(L("Bloodborne \(updater.currentText) is the newest version available."))
                 .foregroundStyle(.secondary)
         case let .failed(message):
-            Text("Update").font(.headline)
+            Text(L("Update")).font(.headline)
             Text(message).foregroundStyle(.red).textSelection(.enabled)
         case let .available(update), let .downloading(update, _), let .installing(update):
-            Text("A new version of Bloodborne is available").font(.headline)
-            Text("Version \(update.version.text) is available; you have \(updater.currentText).")
+            Text(L("A new version of Bloodborne is available")).font(.headline)
+            Text(L("Version \(update.version.text) is available; you have \(updater.currentText)."))
                 .foregroundStyle(.secondary)
             ScrollView {
                 Text(notes(update))
@@ -64,15 +64,15 @@ struct UpdateView: View {
             .frame(height: 220)
             .background(.background.secondary, in: RoundedRectangle(cornerRadius: 6))
             if case let .downloading(_, fraction) = updater.status {
-                ProgressView("Downloading…", value: fraction)
+                ProgressView(L("Downloading…"), value: fraction)
             } else if case .installing = updater.status {
-                ProgressView("Installing…").progressViewStyle(.linear)
+                ProgressView(L("Installing…")).progressViewStyle(.linear)
             } else if let problem = model.updateInstallProblem {
                 Text(problem).font(.caption).foregroundStyle(.secondary)
             } else if model.running {
-                Text("Quit the game to install the update.").font(.caption).foregroundStyle(.secondary)
+                Text(L("Quit the game to install the update.")).font(.caption).foregroundStyle(.secondary)
             } else {
-                Text("The app is replaced and opens again; your saves and settings stay where they are.")
+                Text(L("The app is replaced and opens again; your saves and settings stay where they are."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -81,18 +81,18 @@ struct UpdateView: View {
     @ViewBuilder private var buttons: some View {
         HStack {
             if let update = updater.available {
-                Button("Skip This Version", action: model.skipUpdate).disabled(updater.busy)
-                Button("Release Page") { NSWorkspace.shared.open(update.page) }
+                Button(L("Skip This Version"), action: model.skipUpdate).disabled(updater.busy)
+                Button(L("Release Page")) { NSWorkspace.shared.open(update.page) }
                 Spacer()
-                Button("Later") { updater.dismiss() }.keyboardShortcut(.cancelAction).disabled(updater.busy)
+                Button(L("Later")) { updater.dismiss() }.keyboardShortcut(.cancelAction).disabled(updater.busy)
                 if model.updateInstallProblem == nil {
-                    Button("Install Update", action: model.installUpdate)
+                    Button(L("Install Update"), action: model.installUpdate)
                         .keyboardShortcut(.defaultAction)
                         .disabled(updater.busy || model.running)
                 }
             } else {
                 Spacer()
-                Button("OK") { updater.dismiss() }.keyboardShortcut(.defaultAction)
+                Button(L("OK")) { updater.dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
     }

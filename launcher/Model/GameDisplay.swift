@@ -19,6 +19,6 @@ struct GameDisplay: Hashable, Identifiable {
     /// (so the choice stays visible; the game then uses the main display).
     static func choices(connected: [GameDisplay], saved: String?) -> [GameDisplay] {
         guard let saved, !connected.contains(where: { $0.uuid == saved }) else { return connected }
-        return connected + [GameDisplay(uuid: saved, name: "Display not connected")]
+        return connected + [GameDisplay(uuid: saved, name: L("Display not connected"))]
     }
 }

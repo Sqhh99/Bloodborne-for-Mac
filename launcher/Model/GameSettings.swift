@@ -129,7 +129,7 @@ struct GameSettings: Equatable {
     var mouseInvertY = false
     /// bbport.ini camera_keys_dpad (src/runtime_bindings.c): with the mouse camera, the camera keys
     /// press the d-pad.
-    var cameraKeysDpad = true
+    var cameraKeysDpad = false
     /// bbport.ini pad_menu_combo (gpu/shim/bbport_settings.h): L3+R3 on a controller opens the
     /// in-game menu (#104).
     var padMenuCombo = true
@@ -226,7 +226,7 @@ struct GameSettings: Equatable {
         ini["mouse_sensitivity"] = String(format: "%.2f", mouseSensitivity)
         ini["mouse_vertical"] = String(format: "%.2f", mouseVertical)
         ini["mouse_invert_y"] = mouseInvertY ? "1" : "0"
-        ini["camera_keys_dpad"] = cameraKeysDpad ? nil : "0"
+        ini["camera_keys_dpad"] = cameraKeysDpad ? "1" : nil
         ini["pad_menu_combo"] = padMenuCombo ? "1" : "0"
         bindings.apply(to: &ini)
         padBindings.apply(to: &ini)

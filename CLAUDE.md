@@ -288,6 +288,29 @@ the live path (the startup patch breaks geometry there). Check screenshots when 
   "Frame stats" lines) never arms. Worktree `../bb-fg` (branches test-90/test-fg/test-master)
   is scratch. `gpu/third_party/fsr-vulkan` shows a submodule change that isn't ours: don't commit.
 
+## State as of 2026-11-13 (fork Sqhh99/Bloodborne-for-Mac, local master, not committed)
+
+- **This checkout is a fork**, folder `Bloodborne-for-Mac` (renamed from `bloodborne_mac_port` on
+  2026-11-13: `deps/` config files and the CMake caches held the old path and were repointed, then
+  everything rebuilt). Game: `BloodbornePC/game` inside the repo (git-ignored), in `launch.conf`.
+  The reference project the owner compares with is `../bloodborne-mac` (bloodborne-native).
+- **Key bindings = Dark Souls III's PC layout**, as bloodborne-mac (`src/runtime_bindings.c`
+  defaults, `launcher/Model/Bindings.swift`, docs/DESIGN_INPUT.md): new actions `bind_dodge`
+  (90 ms Circle press), `bind_sprint` (Circle held), jump = dodge while sprinting
+  (`keyboard_circle` in `src/runtime_pad.c`); chords (`Left Shift+Mouse Left`); `bind_circle`
+  has no default key; `camera_keys_dpad` defaults to 0. Not ported: Escape as Circle in game
+  menus (needs menu detection; backlog). Tests pass; **not yet played by the owner**.
+- **Launcher languages:** English, Japanese, Simplified Chinese. `L("...")` /
+  `L(dynamic:)` (`launcher/Model/Localization.swift`), table `launcher/Model/Strings.swift`
+  keyed by the English text; `launch.conf` `BB_LANGUAGE=en|ja|zh` (absent: the system's);
+  picker on General. launcher/Tests fails on any `L("...")` or table label without a
+  translation: add new UI text to Strings.swift. In-game overlay and Mac Settings stay English.
+- **Start time** (FINDINGS 2026-11-13): run.sh builds only when a source is newer than
+  `out/.built` (`BB_BUILD=always|never`) and keeps the prepared image (`$out/prepare.key`,
+  `BB_PREPARE_CACHE=0`). After editing sources a plain Play still rebuilds.
+- Screen capture is not permitted for the agent on this Mac: launcher pages were checked by
+  rendering `LauncherView` off screen (NSHostingView `cacheDisplay`) from a scratch program.
+
 ## Next steps (in order)
 
 1. **Native arm64 GPU process** (docs/DESIGN_NATIVE_GPU_PROCESS.md): M0 spike passed (1.75× on

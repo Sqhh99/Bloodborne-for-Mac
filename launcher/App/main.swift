@@ -15,8 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard let layout = Layout.detect(bundleURL: Bundle.main.bundleURL,
                                          info: Bundle.main.infoDictionary ?? [:]) else {
             let alert = NSAlert()
-            alert.messageText = "This copy of Bloodborne.app is incomplete"
-            alert.informativeText = "Download the app again, or run scripts/macos/make_app.sh in the repository."
+            alert.messageText = L("This copy of Bloodborne.app is incomplete")
+            alert.informativeText = L("Download the app again, or run scripts/macos/make_app.sh in the repository.")
             alert.runModal()
             NSApp.terminate(nil)
             return
@@ -35,7 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             }
         }
         model.onExit = { [weak self] status in self?.gameEnded(status) }
+        model.onLanguageChanged = { [weak self] in self?.buildMenu() }
         model.load()
+        buildMenu() // (launch.conf's language is known now)
         // --updated: the copy an update just installed (Updater.install) shows its window.
         // (⌥ is read before the update question, which may be answered after letting go of it.)
         // --benchmark: show the window and run the benchmark at once (scripted comparisons).
@@ -97,6 +99,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// The app menu, in the launcher's language.
+    func buildMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        menu.addItem(appItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: L("About Bloodborne"), action: #selector(AppDelegate.showAbout(_:)), keyEquivalent: "").target = self
+        appMenu.addItem(withTitle: L("Check for Updates…"), action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "").target = self
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: L("Hide Bloodborne"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: L("Quit Bloodborne"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        NSApp.mainMenu = menu
+    }
+
     @objc func showAbout(_ sender: Any?) { About.show() }
 
     @objc func checkForUpdates(_ sender: Any?) {
@@ -135,18 +153,7 @@ MainActor.assumeIsolated {
     let app = NSApplication.shared
     let delegate = AppDelegate() // app.delegate is weak: this local lives while app.run() runs
     app.delegate = delegate
-    let menu = NSMenu()
-    let appItem = NSMenuItem()
-    menu.addItem(appItem)
-    let appMenu = NSMenu()
-    appMenu.addItem(withTitle: "About Bloodborne", action: #selector(AppDelegate.showAbout(_:)), keyEquivalent: "").target = delegate
-    appMenu.addItem(withTitle: "Check for Updates…", action: #selector(AppDelegate.checkForUpdates(_:)), keyEquivalent: "").target = delegate
-    appMenu.addItem(.separator())
-    appMenu.addItem(withTitle: "Hide Bloodborne", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-    appMenu.addItem(.separator())
-    appMenu.addItem(withTitle: "Quit Bloodborne", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-    appItem.submenu = appMenu
-    app.mainMenu = menu
+    delegate.buildMenu()
     app.setActivationPolicy(.regular)
     app.run()
 }

@@ -43,8 +43,9 @@ static void write_file(const char *path, const char *text) {
     fclose(f);
 }
 
-/* Bindings (runtime_bindings.c): the defaults play like 0.5.9, the ini rebinds, unbinds and
- * ignores what it cannot use; the walk key; camera keys as the d-pad under mouse look. */
+/* Bindings (runtime_bindings.c): the defaults (Dark Souls III's PC layout), the dodge, run and
+ * jump on Circle, chords, the ini (rebinds, unbinds, ignores what it cannot use), the walk key,
+ * camera keys as the d-pad under mouse look when asked. */
 static void test_bindings(void) {
     use_keys=1;
     runtime_bindings_load(NULL);
@@ -56,44 +57,103 @@ static void test_bindings(void) {
     assert(d.left_y==127);
     d=PRESS(SDL_SCANCODE_LALT,SDL_SCANCODE_A,SDL_SCANCODE_S);
     assert(d.left_x==64 && d.left_y==192);
-    d=PRESS(SDL_SCANCODE_SPACE,SDL_SCANCODE_LSHIFT,SDL_SCANCODE_R,SDL_SCANCODE_F);
-    assert(d.buttons==(BTN_CROSS|BTN_CIRCLE|BTN_L2|BTN_R2) && d.l2==255 && d.r2==255);
-    d=PRESS(SDL_SCANCODE_KP_ENTER,SDL_SCANCODE_O,SDL_SCANCODE_I,SDL_SCANCODE_L);
+    d=PRESS(SDL_SCANCODE_F,SDL_SCANCODE_R,SDL_SCANCODE_Q,SDL_SCANCODE_E);
+    assert(d.buttons==(BTN_CROSS|BTN_SQUARE|BTN_TRIANGLE|BTN_L1) && d.l2==0 && d.r2==0);
+    d=PRESS(SDL_SCANCODE_KP_ENTER,SDL_SCANCODE_ESCAPE,SDL_SCANCODE_3,SDL_SCANCODE_RIGHT);
     assert(d.buttons==(BTN_CROSS|BTN_OPTIONS|BTN_UP|BTN_RIGHT));
-    memset(keys,0,sizeof keys); keys[SDL_SCANCODE_TAB]=true; /* not pressed through the pad: touch ids are checked below */
+    d=PRESS(SDL_SCANCODE_1,SDL_SCANCODE_2,SDL_SCANCODE_4,SDL_SCANCODE_LCTRL,SDL_SCANCODE_C,SDL_SCANCODE_TAB);
+    assert(d.buttons==(BTN_LEFT|BTN_RIGHT|BTN_DOWN|BTN_L3|BTN_R3|BTN_SQUARE));
+    memset(keys,0,sizeof keys); keys[SDL_SCANCODE_G]=true; /* not pressed through the pad: touch ids are checked below */
     assert(runtime_bindings_held(keys,0)==(UINT64_C(1)<<BIND_TOUCH_LEFT));
-    d=PRESS(SDL_SCANCODE_LEFT,SDL_SCANCODE_DOWN);
+    /* IJKL are the camera, with the mouse camera too; the arrow keys are the d-pad. */
+    d=PRESS(SDL_SCANCODE_J,SDL_SCANCODE_K);
     assert(d.right_x==0 && d.right_y==255 && d.buttons==0);
     mouse_look=1;
-    d=PRESS(SDL_SCANCODE_LEFT,SDL_SCANCODE_DOWN);
-    assert(d.right_x==128 && d.right_y==128 && d.buttons==(BTN_LEFT|BTN_DOWN));
+    d=PRESS(SDL_SCANCODE_J,SDL_SCANCODE_K,SDL_SCANCODE_LEFT);
+    assert(d.right_x==0 && d.right_y==255 && d.buttons==BTN_LEFT);
     mouse_look=0;
     d=PRESS(SDL_SCANCODE_LGUI,SDL_SCANCODE_Q);
     assert(d.buttons==0); /* Cmd+Q is the Mac's */
-    assert(runtime_bindings_held(NULL,SDL_BUTTON_LMASK|SDL_BUTTON_X1MASK)==((UINT64_C(1)<<BIND_R1)|(UINT64_C(1)<<BIND_R2)));
-    assert(!runtime_bindings_use_wheel());
+
+    /* Circle: the run holds it; the dodge is a 90 ms press however long Space is held. */
+    d=PRESS(SDL_SCANCODE_LSHIFT,SDL_SCANCODE_W);
+    assert(d.buttons==BTN_CIRCLE);
+    d=PRESS(SDL_SCANCODE_W);
+    assert(d.buttons==0);
+    d=PRESS(SDL_SCANCODE_SPACE);
+    assert(d.buttons==BTN_CIRCLE);
+    usleep(120000);
+    d=PRESS(SDL_SCANCODE_SPACE);
+    assert(d.buttons==0); /* still held: no run */
+    d=PRESS(SDL_SCANCODE_W);
+    assert(d.buttons==0);
+    /* The jump, Space while running: Circle let go, pressed, let go, held again. */
+    d=PRESS(SDL_SCANCODE_LSHIFT);
+    assert(d.buttons==BTN_CIRCLE);
+    d=PRESS(SDL_SCANCODE_LSHIFT,SDL_SCANCODE_SPACE);
+    assert(d.buttons==0);
+    usleep(90000);
+    d=PRESS(SDL_SCANCODE_LSHIFT,SDL_SCANCODE_SPACE);
+    assert(d.buttons==BTN_CIRCLE);
+    usleep(70000);
+    d=PRESS(SDL_SCANCODE_LSHIFT);
+    assert(d.buttons==0);
+    usleep(70000);
+    d=PRESS(SDL_SCANCODE_LSHIFT);
+    assert(d.buttons==BTN_CIRCLE);
+    (void)PRESS(SDL_SCANCODE_W);
+
+    /* The mouse: left R1, Shift + left R2 alone (the chord hides the plain click), right L2, the
+     * side buttons R2 and L1, the wheel the d-pad. */
+    const uint64_t r1=UINT64_C(1)<<BIND_R1, r2=UINT64_C(1)<<BIND_R2, sprint=UINT64_C(1)<<BIND_SPRINT;
+    assert(runtime_bindings_held(NULL,SDL_BUTTON_LMASK|SDL_BUTTON_RMASK)==(r1|(UINT64_C(1)<<BIND_L2)));
+    assert(runtime_bindings_held(NULL,SDL_BUTTON_X1MASK|SDL_BUTTON_X2MASK)==(r2|(UINT64_C(1)<<BIND_L1)));
+    memset(keys,0,sizeof keys); keys[SDL_SCANCODE_LSHIFT]=true;
+    assert(runtime_bindings_held(keys,SDL_BUTTON_LMASK)==(r2|sprint));
+    assert(runtime_bindings_held(keys,0)==sprint);
+    assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_UP));
+    assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_DOWN));
+    assert(runtime_bindings_use_wheel());
 
     char path[]="/tmp/bbport-bindings-test-XXXXXX";
     int fd=mkstemp(path);
     assert(fd>=0);
     close(fd);
-    write_file(path,"# comment\r\nupscaler=metalfx\r\nbind_cross = K , Mouse Left\r\nbind_dpad_down=\r\n"
-                    "bind_square=Left GUI,Bogus,g\r\nbind_r1=Wheel Up\r\nbind_walk=CapsLock\r\ncamera_keys_dpad=0\r\n");
+    write_file(path,"# comment\r\nupscaler=metalfx\r\nbind_cross = K , Mouse Left\r\nbind_dpad_down=\r\nbind_dpad_up=3\r\n"
+                    "bind_square=Left GUI,Bogus,y,Left GUI+H,Bogus+H\r\nbind_r1=Wheel Up\r\nbind_walk=CapsLock\r\ncamera_keys_dpad=1\r\n"
+                    "bind_circle=Left Ctrl + Keypad +, X\r\nbind_r2=Left Alt+F\r\nbind_l2=F\r\n");
     runtime_bindings_load(path);
     d=PRESS(SDL_SCANCODE_K);
-    assert(d.buttons==BTN_CROSS); /* K was the d-pad's down: now Cross, and down is unbound */
-    d=PRESS(SDL_SCANCODE_SPACE,SDL_SCANCODE_G);
-    assert(d.buttons==BTN_SQUARE); /* Space is no longer Cross; Cmd and unknown names ignored */
+    assert(d.buttons==BTN_CROSS && d.right_y==255); /* K is Cross now, and still the camera's down */
+    d=PRESS(SDL_SCANCODE_F,SDL_SCANCODE_Y);
+    assert(d.buttons==(BTN_SQUARE|BTN_L2) && d.l2==255); /* F is no longer Cross; Cmd, Cmd chords and unknown names ignored */
+    d=PRESS(SDL_SCANCODE_H);
+    assert(d.buttons==0);
+    d=PRESS(SDL_SCANCODE_LALT,SDL_SCANCODE_F);
+    assert(d.buttons==BTN_R2 && d.r2==255 && d.l2==0); /* the chord, not F's plain binding */
+    d=PRESS(SDL_SCANCODE_KP_PLUS);
+    assert(d.buttons==0);
+    d=PRESS(SDL_SCANCODE_LCTRL,SDL_SCANCODE_KP_PLUS);
+    assert(d.buttons==(BTN_CIRCLE|BTN_L3)); /* "Keypad +" is one key, the chord's second */
+    d=PRESS(SDL_SCANCODE_X);
+    assert(d.buttons==BTN_CIRCLE); /* the plain Circle button: held */
+    d=PRESS(SDL_SCANCODE_4);
+    assert(d.buttons==0); /* unbound */
     d=PRESS(SDL_SCANCODE_CAPSLOCK,SDL_SCANCODE_D);
     assert(d.left_x==192);
     mouse_look=1;
-    d=PRESS(SDL_SCANCODE_UP);
-    assert(d.right_y==0 && d.buttons==0); /* camera_keys_dpad=0: the keys keep the camera */
+    d=PRESS(SDL_SCANCODE_I);
+    assert(d.right_y==128 && d.buttons==BTN_UP); /* camera_keys_dpad=1: the camera keys press the d-pad */
     mouse_look=0;
+    d=PRESS(SDL_SCANCODE_I);
+    assert(d.right_y==0 && d.buttons==0);
     assert(runtime_bindings_held(NULL,SDL_BUTTON_LMASK)==(UINT64_C(1)<<BIND_CROSS));
     assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_R1));
     assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==0);
     assert(runtime_bindings_use_wheel());
+    write_file(path,"bind_dpad_up=3\nbind_dpad_down=4\n");
+    runtime_bindings_load(path);
+    assert(!runtime_bindings_use_wheel());
     unlink(path);
     runtime_bindings_load(NULL);
     memset(keys,0,sizeof keys);

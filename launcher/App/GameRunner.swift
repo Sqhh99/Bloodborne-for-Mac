@@ -64,12 +64,12 @@ enum GameRunner {
     /// nil when the folder holds a usable game, else game_check.py's reason.
     static func checkGame(_ folder: URL, layout: Layout) -> String? {
         guard FileManager.default.fileExists(atPath: folder.appendingPathComponent("eboot.bin").path) else {
-            return "There is no eboot.bin in this folder. Choose the folder that contains eboot.bin, sce_sys and dvdroot_ps4."
+            return L("There is no eboot.bin in this folder. Choose the folder that contains eboot.bin, sce_sys and dvdroot_ps4.")
         }
         let result = run(layout.gameCheckCommand + [folder.path])
         if result.status == 0 { return nil }
         let reason = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
-        return reason.isEmpty ? "The game check failed (status \(result.status))." : reason
+        return reason.isEmpty ? L("The game check failed (status \(result.status)).") : reason
     }
 
     /// Starts the game; `done` gets its exit status on the main queue, after the session log

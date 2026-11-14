@@ -35,7 +35,7 @@ enum Benchmark {
         let route = fm.fileExists(atPath: folder.appendingPathComponent("route.pad").path)
         let save = fm.fileExists(atPath: folder.appendingPathComponent("savedata").path, isDirectory: &isFolder) && isFolder.boolValue
         if route && save { return nil }
-        return "The benchmark needs its save and recorded route (route.pad and savedata/) in \(folder.path). This build doesn't include them."
+        return L("The benchmark needs its save and recorded route (route.pad and savedata/) in \(folder.path). This build doesn't include them.")
     }
 
     /// The pass's bbport.ini: the standard settings, nothing from the player's.

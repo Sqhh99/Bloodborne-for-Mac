@@ -3,6 +3,9 @@
 // Model tests for the launcher (scripts/macos/build_launcher.sh --test). One PASS line or exit 1.
 import Foundation
 
+// The model's messages are checked in English, whatever this Mac's language is.
+Localization.language = .english
+
 var failures = 0
 func check(_ condition: @autoclosure () -> Bool, _ what: String, line: Int = #line) {
     if !condition() {
@@ -163,7 +166,7 @@ do {
 // defaults and key names against it and SDL).
 do {
     let defaults = GameSettings(ini: IniFile())
-    check(defaults.bindings.isDefault && defaults.mouseSensitivity == 1 && defaults.mouseVertical == 1 && !defaults.mouseInvertY && defaults.cameraKeysDpad && defaults.padMenuCombo, "default controls")
+    check(defaults.bindings.isDefault && defaults.mouseSensitivity == 1 && defaults.mouseVertical == 1 && !defaults.mouseInvertY && !defaults.cameraKeysDpad && defaults.padMenuCombo, "default controls")
     var untouched = IniFile(text: "upscaler=off\n")
     defaults.apply(to: &untouched)
     check(!untouched.text.contains("bind_") && untouched["camera_keys_dpad"] == nil, "defaults write no bind_ keys")
@@ -179,26 +182,38 @@ do {
     let cross = Bindings.actions.first { $0.key == "bind_cross" }!
     let dpadDown = Bindings.actions.first { $0.key == "bind_dpad_down" }!
     let r1 = Bindings.actions.first { $0.key == "bind_r1" }!
-    let read = GameSettings(ini: IniFile(text: "bind_cross= k , mouse left,Bogus,Left GUI\r\nbind_dpad_down=\nmouse_sensitivity=40\nmouse_vertical=0.5\ncamera_keys_dpad=0\n"))
+    let read = GameSettings(ini: IniFile(text: "bind_cross= k , mouse left,Bogus,Left GUI\r\nbind_dpad_down=\nmouse_sensitivity=40\nmouse_vertical=0.5\ncamera_keys_dpad=1\n"))
     check(read.bindings[cross] == ["K", "Mouse Left"], "names canonical; unknown and Cmd dropped")
     check(read.bindings[dpadDown] == [], "empty value unbinds")
-    check(read.mouseSensitivity == 10 && read.mouseVertical == 0.5 && !read.cameraKeysDpad, "mouse values read, clamped")
+    check(read.mouseSensitivity == 10 && read.mouseVertical == 0.5 && read.cameraKeysDpad, "mouse values read, clamped")
     check(read.bindings.others(using: "Mouse Left", besides: cross) == [r1], "shared input reported")
     var file = IniFile(text: "# header\n")
     read.apply(to: &file)
-    check(file["bind_cross"] == "K,Mouse Left" && file["bind_dpad_down"] == "" && file["bind_r1"] == nil && file["camera_keys_dpad"] == "0", "only changes written")
+    check(file["bind_cross"] == "K,Mouse Left" && file["bind_dpad_down"] == "" && file["bind_r1"] == nil && file["camera_keys_dpad"] == "1", "only changes written")
     check(GameSettings(ini: file).bindings == read.bindings, "bindings round trip")
 
+    let l1 = Bindings.actions.first { $0.key == "bind_l1" }!
     var b = Bindings()
-    b.set(r1, slot: 1, to: "Mouse Left") // already in slot 0: moved, not duplicated
-    check(b[r1] == ["3", "Mouse Left"], "no duplicate within an action")
+    b.set(l1, slot: 1, to: "E") // already in slot 0: moved, not duplicated
+    check(b[l1] == ["Mouse Forward", "E"], "no duplicate within an action")
     b = Bindings()
-    b.set(r1, slot: 0, to: "G")
-    check(b[r1] == ["G", "3"], "replace a slot")
-    b.set(r1, slot: 5, to: "H")
-    check(b[r1] == ["G", "3", "H"], "past the end appends")
-    b.set(r1, slot: 0, to: nil)
-    check(b[r1] == ["3", "H"] && !b.isDefault, "clear a slot")
+    b.set(l1, slot: 0, to: "G")
+    check(b[l1] == ["G", "Mouse Forward"], "replace a slot")
+    b.set(l1, slot: 5, to: "H")
+    check(b[l1] == ["G", "Mouse Forward", "H"], "past the end appends")
+    b.set(l1, slot: 0, to: nil)
+    check(b[l1] == ["Mouse Forward", "H"] && !b.isDefault, "clear a slot")
+    // Chords: an input while another is held; "Keypad +" is one key.
+    let r2 = Bindings.actions.first { $0.key == "bind_r2" }!
+    check(Bindings()[r2] == ["Left Shift+Mouse Left", "Mouse Back"], "the default chord")
+    check(Bindings.canonical(" left shift + mouse left") == "Left Shift+Mouse Left" && Bindings.canonical("Keypad +") == "Keypad +", "chord names canonical")
+    check(Bindings.canonical("Left GUI+Q") == nil && Bindings.canonical("Bogus+Q") == nil && Bindings.canonical("Q+Bogus") == nil, "chords the game ignores")
+    check(Bindings.chord("Left Ctrl+Keypad +")! == ("Left Ctrl", "Keypad +") && Bindings.chord("Keypad +") == nil, "chord parts")
+    let chords = GameSettings(ini: IniFile(text: "bind_r2=left alt+f,Mouse Back\n"))
+    var chordFile = IniFile()
+    chords.apply(to: &chordFile)
+    check(chordFile["bind_r2"] == "Left Alt+F,Mouse Back" && GameSettings(ini: chordFile).bindings == chords.bindings, "chords round trip")
+    check(Bindings().others(using: "Left Shift+Mouse Left", besides: r2).isEmpty, "a chord is not the plain click")
     var restored = IniFile(text: "bind_r1=G\n")
     Bindings().apply(to: &restored)
     check(restored["bind_r1"] == nil, "back to the default removes the key")
@@ -975,8 +990,133 @@ do {
     try? fm.removeItem(at: dir)
 }
 
+// Languages (launcher/Model/Localization.swift, Strings.swift): the system's language or
+// launch.conf's, values put into translations, and a translation for everything the launcher
+// shows: each L("...") in its sources and each label of the settings and bindings tables.
+do {
+    check(Language.preferred(["zh-Hans-CN", "en-US"]) == .chinese && Language.preferred(["ja-JP"]) == .japanese, "system language")
+    check(Language.preferred(["zh-Hant-TW"]) == .chinese && Language.preferred(["fr-FR", "ja"]) == .japanese, "Traditional Chinese, a later preference")
+    check(Language.preferred(["de-DE"]) == .english && Language.preferred([]) == .english && Language.preferred(["en_GB", "ja"]) == .english, "English otherwise")
+    check(Localization.fill("%2$@ of %1$@, %@ %@: 40%%", ["a", "b"]) == "b of a, a b: 40%" && Localization.fill("%@ %@", ["x"]) == "x ", "values into a translation")
+    check(Localization.string("Play", in: .japanese) == "プレイ" && Localization.string("Play", in: .chinese) == "开始游戏" && Localization.string("Play", in: .english) == "Play", "a plain string")
+    check(Localization.string("up to 40% more", in: .chinese) == "up to 40% more", "no translation: English, as written")
+    let count = 3
+    check(Localization.string("\(count) mods", in: .chinese) == "3 个模组" && Localization.string("\(count) mods", in: .english) == "3 mods", "values")
+    check(Localization.string("Benchmark: pass \(1) of \(2), \("x")…", in: .japanese) == "ベンチマーク：2 回中 1 回目、x…", "values in another order")
+    Localization.language = .chinese
+    check(L("Cancel") == "取消" && L(dynamic: "Movement") == "移动" && Cheats.summary(mods: 2, cheats: 1) == "已启用 2 个模组 · 1 项作弊", "the language in use")
+    Localization.language = .english
+    check(L("Cancel") == "Cancel" && Cheats.summary(mods: 2, cheats: 1) == "2 mods · 1 cheat on", "English again")
+
+    var conf = LaunchConfig(ini: IniFile(text: "BB_LANGUAGE=ja\n"))
+    check(conf.language == .japanese && conf.extraEnvironment["BB_LANGUAGE"] == nil, "BB_LANGUAGE read, not passed to the game")
+    check(LaunchConfig(ini: IniFile(text: "BB_LANGUAGE=xx\n")).language == nil && LaunchConfig(ini: IniFile()).language == nil, "unknown or absent: the system's")
+    var confFile = IniFile(text: "BB_LANGUAGE=ja\n")
+    conf.language = .chinese
+    conf.apply(to: &confFile)
+    check(confFile["BB_LANGUAGE"] == "zh", "BB_LANGUAGE written")
+    conf.language = nil
+    conf.apply(to: &confFile)
+    check(confFile["BB_LANGUAGE"] == nil, "the system's language removes the key")
+
+    /// The keys of every L("...") in `source`, as LocalizedText builds them.
+    func keys(in source: String) -> [String] {
+        let s = Array(source)
+        var found: [String] = []
+        /// From the opening quote at `start`: the index after the closing one.
+        func end(_ start: Int) -> Int {
+            var j = start + 1
+            while j < s.count && s[j] != "\"" && s[j] != "\n" {
+                if s[j] == "\\" && s[j + 1] == "(" {
+                    var depth = 1
+                    j += 2
+                    while depth > 0 && j < s.count {
+                        if s[j] == "\"" { j = end(j); continue }
+                        if s[j] == "(" { depth += 1 } else if s[j] == ")" { depth -= 1 }
+                        j += 1
+                    }
+                } else {
+                    j += s[j] == "\\" ? 2 : 1
+                }
+            }
+            return j + 1
+        }
+        var i = 0
+        while i < s.count {
+            if s[i] == "/" && i + 1 < s.count && s[i + 1] == "/" {
+                while i < s.count && s[i] != "\n" { i += 1 }
+            } else if s[i] == "\"" && i + 2 < s.count && s[i + 1] == "\"" && s[i + 2] == "\"" {
+                i += 3
+                while i + 2 < s.count && !(s[i] == "\"" && s[i + 1] == "\"" && s[i + 2] == "\"") { i += 1 }
+                i += 3
+            } else if s[i] == "\"" {
+                let close = end(i)
+                let isCall = i >= 2 && s[i - 1] == "(" && s[i - 2] == "L" && (i < 3 || !(s[i - 3].isLetter || s[i - 3].isNumber || s[i - 3] == "_"))
+                if isCall {
+                    var key = "", values = false
+                    var j = i + 1
+                    while j < close - 1 {
+                        if s[j] == "\\" && s[j + 1] == "(" {
+                            var depth = 1
+                            j += 2
+                            while depth > 0 {
+                                if s[j] == "\"" { j = end(j); continue }
+                                if s[j] == "(" { depth += 1 } else if s[j] == ")" { depth -= 1 }
+                                j += 1
+                            }
+                            key += "\u{0}"
+                            values = true
+                        } else if s[j] == "\\" && s[j + 1] == "u" {
+                            let brace = s[j...].firstIndex(of: "}")!
+                            key.unicodeScalars.append(Unicode.Scalar(UInt32(String(s[(j + 3)..<brace]), radix: 16)!)!)
+                            j = brace + 1
+                        } else if s[j] == "\\" {
+                            key.append(s[j + 1] == "n" ? "\n" : s[j + 1])
+                            j += 2
+                        } else {
+                            key.append(s[j])
+                            j += 1
+                        }
+                    }
+                    if values { key = key.replacingOccurrences(of: "%", with: "%%").replacingOccurrences(of: "\u{0}", with: "%@") }
+                    found.append(key)
+                }
+                i = close
+            } else {
+                i += 1
+            }
+        }
+        return found
+    }
+    check(keys(in: "x = L(\"a \\(f(\"q\", (1))) b 5% \\u{2013}\") // L(\"no\")\nURL(\"u\"); L(\"Don't\\n\")") == ["a %@ b 5%% \u{2013}", "Don't\n"], "keys found in a source")
+
+    let fm = FileManager.default
+    var used = Set<String>()
+    for folder in ["launcher/App", "launcher/Model"] {
+        for name in (try? fm.contentsOfDirectory(atPath: folder)) ?? [] where name.hasSuffix(".swift") {
+            used.formUnion(keys(in: (try? String(contentsOfFile: "\(folder)/\(name)", encoding: .utf8)) ?? ""))
+        }
+    }
+    check(used.count > 200, "the launcher's sources were read (from the repository folder): \(used.count) strings")
+    // Labels shown through L(dynamic:). Names that are the same everywhere (FSR 3.1, MetalFX,
+    // 60, PlayStation's button names) have no entry.
+    var labels = Bindings.actions.map(\.label) + Bindings.groups + PadBindings.actions.map(\.label)
+    labels += GameSettings.effects.map(\.label) + Resolution.presetNames
+    labels += [Upscaler.off.label] + GameTiming.allCases.map(\.label) + ModelDetail.allCases.map(\.label)
+    labels += LiveResolution.allCases.map(\.label) + ShaderCompile.allCases.map(\.label)
+    labels += ["Select", "Misc"].map(PadBindings.label)
+    used.formUnion(labels.filter { $0 != "L3" })
+    for key in used.sorted() where Strings.table[key] == nil { check(false, "no translation for \"\(key)\"") }
+    func values(_ text: String) -> Int { text.components(separatedBy: "@").count - 1 }
+    for (key, entry) in Strings.table {
+        check(!entry.ja.isEmpty && !entry.zh.isEmpty, "empty translation of \"\(key)\"")
+        check(values(entry.ja) == values(key) && values(entry.zh) == values(key), "values differ in a translation of \"\(key)\"")
+    }
+}
+
+
 if failures > 0 {
     print("FAIL: launcher model, \(failures) failed")
     exit(1)
 }
-print("PASS: launcher model (ini, resolutions, settings, launch.conf, saves, launch plan, crash report, updates, session logs, native crashes, benchmark, mods and cheats, controls)")
+print("PASS: launcher model (ini, resolutions, settings, launch.conf, saves, launch plan, crash report, updates, session logs, native crashes, benchmark, mods and cheats, controls, languages)")

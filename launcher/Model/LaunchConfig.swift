@@ -34,7 +34,8 @@ enum Shell {
 }
 
 /// launch.conf: the launcher's own settings as shell assignments (bash sources the file in
-/// Bloodborne.command): BB_GAME_DIR, BB_SAVE_DIR (absent: the default), BB_SHOW_LAUNCHER, and the
+/// Bloodborne.command): BB_GAME_DIR, BB_SAVE_DIR (absent: the default), BB_SHOW_LAUNCHER,
+/// BB_LANGUAGE (the launcher's language: en, ja or zh; absent: the system's), and the
 /// update check's BB_CHECK_UPDATES (absent: not asked yet), BB_UPDATE_TEST_BUILDS, BB_UPDATE_SKIP (a version the player
 /// skipped) and BB_UPDATE_CHECKED (the last automatic check, Unix seconds).
 /// Other assignments in it (BB_DATA_DIR, BB_FPS, ...) stay in the IniFile.
@@ -42,6 +43,8 @@ struct LaunchConfig: Equatable {
     var gameDir: URL?
     var saveDir: URL?
     var showLauncher = true
+    /// The launcher's language; nil follows the system (Language.preferred).
+    var language: Language?
     /// Automatic update checks; nil until the player answers the first-run question.
     var checkUpdates: Bool?
     var testBuilds = false
@@ -53,7 +56,7 @@ struct LaunchConfig: Equatable {
     private(set) var extraEnvironment: [String: String] = [:]
     static let ownKeys: Set<String> = ["BB_GAME_DIR", "BB_SAVE_DIR", "BB_SHOW_LAUNCHER", "BB_CHECK_UPDATES",
                                        "BB_UPDATE_TEST_BUILDS", "BB_UPDATE_SKIP", "BB_UPDATE_CHECKED",
-                                       "BB_LAUNCH_CONF"]
+                                       "BB_LAUNCH_CONF", "BB_LANGUAGE"]
 
     init() {}
 
@@ -66,6 +69,7 @@ struct LaunchConfig: Equatable {
         saveDir = path("BB_SAVE_DIR")
         dataDir = path("BB_DATA_DIR")
         if let v = ini["BB_SHOW_LAUNCHER"] { showLauncher = Shell.unquote(v) != "0" }
+        language = ini["BB_LANGUAGE"].flatMap { Language(rawValue: Shell.unquote($0)) }
         if let v = ini["BB_CHECK_UPDATES"] { checkUpdates = Shell.unquote(v) != "0" }
         if let v = ini["BB_UPDATE_TEST_BUILDS"] { testBuilds = Shell.unquote(v) == "1" }
         skippedVersion = ini["BB_UPDATE_SKIP"].map(Shell.unquote).flatMap { $0.isEmpty ? nil : $0 }
@@ -87,6 +91,7 @@ struct LaunchConfig: Equatable {
         ini["BB_GAME_DIR"] = gameDir.map { Shell.quote($0.path) }
         ini["BB_SAVE_DIR"] = saveDir.map { Shell.quote($0.path) }
         ini["BB_SHOW_LAUNCHER"] = showLauncher ? "1" : "0"
+        ini["BB_LANGUAGE"] = language?.rawValue
         ini["BB_CHECK_UPDATES"] = checkUpdates.map { $0 ? "1" : "0" }
         ini["BB_UPDATE_TEST_BUILDS"] = testBuilds ? "1" : nil
         ini["BB_UPDATE_SKIP"] = skippedVersion.map(Shell.quote)
