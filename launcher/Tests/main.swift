@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 Mark Hall
 // SPDX-License-Identifier: GPL-2.0-or-later
 // Model tests for the launcher (scripts/macos/build_launcher.sh --test). One PASS line or exit 1.
+import CoreGraphics
 import Foundation
 
 // The model's messages are checked in English, whatever this Mac's language is.
@@ -268,8 +269,11 @@ do {
     config.saveDir = URL(fileURLWithPath: tricky[1])
     config.gameDir = URL(fileURLWithPath: tricky[2])
     config.showLauncher = false
+    check(!config.hideWhilePlaying, "launcher stays shown while playing by default")
+    config.hideWhilePlaying = true
     config.apply(to: &conf)
-    check(LaunchConfig(ini: conf) == config, "launch.conf round trip")
+    check(LaunchConfig(ini: conf) == config && conf["BB_HIDE_LAUNCHER"] == "1", "launch.conf round trip")
+    check(LaunchConfig(ini: conf).extraEnvironment["BB_HIDE_LAUNCHER"] == nil, "launcher setting not passed to the game")
     check(conf["BB_FPS"] == "uncap" && conf["BB_DATA_DIR"] == "/tmp/data", "other assignments kept")
 
     let url = FileManager.default.temporaryDirectory.appendingPathComponent("launcher-conf-\(getpid()).conf")
@@ -1122,6 +1126,28 @@ do {
     }
 }
 
+// The Dock icon: the square artwork on Apple's grid, rounded, transparent around the tile.
+do {
+    let side = 64
+    let red = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    red.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    red.fill(CGRect(x: 0, y: 0, width: side, height: side))
+    if let icon = AppIcon.rounded(red.makeImage()!), let data = icon.dataProvider?.data,
+       let bytes = CFDataGetBytePtr(data) {
+        func pixel(_ x: Int, _ y: Int) -> (r: UInt8, a: UInt8) {
+            let at = y * icon.bytesPerRow + x * 4
+            return (bytes[at], bytes[at + 3])
+        }
+        check(icon.width == 1024 && icon.height == 1024, "icon canvas 1024")
+        check(pixel(512, 512) == (255, 255), "icon artwork in the middle")
+        check(pixel(4, 4).a == 0 && pixel(1019, 4).a == 0, "icon margin transparent")
+        check(pixel(512, 104).a == 255 && pixel(512, 104).r == 255, "icon tile reaches its edge")
+        check(pixel(104, 104).r < 128, "icon corners rounded")
+    } else {
+        check(false, "icon made")
+    }
+}
 
 if failures > 0 {
     print("FAIL: launcher model, \(failures) failed")

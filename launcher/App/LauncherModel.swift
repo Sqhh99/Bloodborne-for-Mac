@@ -180,7 +180,13 @@ final class LauncherModel: ObservableObject {
         let iconURL = folder.appendingPathComponent("sce_sys/icon0.png")
         guard FileManager.default.fileExists(atPath: iconURL.path),
               let iconImage = NSImage(contentsOf: iconURL) else { return }
-        NSApplication.shared.applicationIconImage = iconImage
+        // Rounded like the other icons in the Dock (the plain square showed square corners).
+        if let square = iconImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
+           let rounded = AppIcon.rounded(square) {
+            NSApplication.shared.applicationIconImage = NSImage(cgImage: rounded, size: NSSize(width: 512, height: 512))
+        } else {
+            NSApplication.shared.applicationIconImage = iconImage
+        }
     }
 
     private func pickFolder(_ message: String, start: URL?) -> URL? {

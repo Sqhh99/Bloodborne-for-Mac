@@ -29,6 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                 // Respect direct launch: only the game's window has a Dock icon.
                 self.window?.orderOut(nil)
                 NSApp.setActivationPolicy(.accessory)
+            } else if self.model.config.hideWhilePlaying && !self.model.benchmark.isRunning {
+                // Out of the way while the game runs (its settings are locked then), Dock icon
+                // too: the game's window has its own "Bloodborne" icon, and a second one (or ⌘Tab
+                // to it) only brought the hidden launcher back. Back when the game ends (gameEnded
+                // -> showWindow, which makes it a regular app again).
+                self.window?.orderOut(nil)
+                NSApp.setActivationPolicy(.accessory)
             } else {
                 // Keep the launcher available behind the game, including its Stop button.
                 self.showWindow(activate: false)
