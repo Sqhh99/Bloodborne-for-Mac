@@ -22,9 +22,27 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   `UCKeyTranslate`) or `Mouse Left/Right/Middle/Back/Forward`, `Wheel Up/Down`. Absent key =
   default, empty = unbound. The launcher writes only changed actions. Cmd is reserved.
   The in-game menu's Save keeps these keys (not owned).
-- **Defaults = the 0.5.9 layout** plus Left Alt = walk (movement keys at half deflection).
-- `camera_keys_dpad` (default 1): while the mouse has the camera, keys bound to the camera press
-  the d-pad (the 0.5.7 arrow-key behaviour, now for whatever keys are bound there).
+- **Defaults = Dark Souls III's PC layout** (2026-11-13, as bloodborne-mac's
+  `runtime/src/runtime_pad.c` `bind_defaults`; before: the 0.5.9 layout). WASD move, IJKL camera,
+  Space dodge, Left Shift run, Left Alt walk, F / Return Cross, Q Triangle, Tab / R Square, E L1,
+  C R3, Left Ctrl L3, Escape Options, G / Backspace touchpad left / right, d-pad on 1 2 3 4, the
+  arrow keys and the wheel; mouse left R1, Shift + left R2, right L2, middle R3, back R2,
+  forward L1. An ini with its own `bind_` lines keeps them; only absent keys get the new defaults.
+- **Dodge, run, jump** (`bind_dodge`, `bind_sprint`; `keyboard_circle` in `src/runtime_pad.c`):
+  Circle by what it does. The dodge is a 90 ms Circle press however long the key is held (held,
+  the game would run); the run holds Circle; the dodge key while running is the jump (Circle
+  let go 70 ms, pressed 70 ms, let go 70 ms, held again). `bind_circle` (the plain button, for
+  "back" in menus) has no default key: Space and Left Shift press Circle there too.
+- **Chords:** `Left Shift+Mouse Left` counts while both are held, and the second input's plain
+  bindings do not count meanwhile (Shift + click is R2, not R2 and R1; the Shift itself still
+  runs). `Keypad +` is one key (nothing follows its plus). The launcher's capture sheet binds a
+  modifier when it is let go, or the chord when another key or a mouse button is pressed with it.
+- `camera_keys_dpad` (default 0 since the arrow keys are the d-pad by default; it was 1): while
+  the mouse has the camera, keys bound to the camera press the d-pad instead.
+- **Not ported from bloodborne-mac:** Escape as Circle (back) while a game menu is open, and
+  clicks in menus. They need its menu detection (`bbgpu_pointer_wanted`, its pointer menus);
+  here Escape is always Options (it closes the menu). Its key-as-stick ramps (`key_stick`) and
+  short-tap latch are not ported either. See MACOS_BACKLOG (Mac GUI).
 - **Wheel:** the host counts whole steps (physical direction, trackpad fractions accumulated);
   the game turns each step into a 50 ms press + 50 ms release, at most 8 queued.
 - Mouse buttons and the wheel reach the game only while the window holds the cursor (Mouse

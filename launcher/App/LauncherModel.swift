@@ -18,7 +18,9 @@ final class LauncherModel: ObservableObject {
     private var gameProcess: Process?
 
     @Published var settings = GameSettings()
-    @Published var config = LaunchConfig()
+    @Published var config = LaunchConfig() {
+        didSet { if config.language != oldValue.language { applyLanguage() } }
+    }
     @Published private(set) var dataDir: URL
     @Published private(set) var gameProblem: String?
     @Published private(set) var checkingGame = false
@@ -44,6 +46,8 @@ final class LauncherModel: ObservableObject {
     private var screenChanges: AnyCancellable?
 
     var onStarted: (() -> Void)?
+    /// The launcher's language changed (main.swift rebuilds the app menu).
+    var onLanguageChanged: (() -> Void)?
     var onExit: ((Int32) -> Void)?
 
     init(layout: Layout) {
@@ -63,8 +67,19 @@ final class LauncherModel: ObservableObject {
             guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
                   let uuid = CGDisplayCreateUUIDFromDisplayID(number.uint32Value)?.takeRetainedValue(),
                   let text = CFUUIDCreateString(nil, uuid) as String? else { return nil }
-            return GameDisplay(uuid: text, name: index == 0 ? "\(screen.localizedName) (main)" : screen.localizedName)
+            return GameDisplay(uuid: text, name: index == 0 ? L("\(screen.localizedName) (main)") : screen.localizedName)
         }
+    }
+
+    /// launch.conf's choice, else the system's language; text made earlier (the game folder's
+    /// problem, the mods summary) is made again in it.
+    private func applyLanguage() {
+        let language = config.language ?? Language.preferred(Locale.preferredLanguages)
+        guard language != Localization.language else { return }
+        Localization.language = language
+        displays = Self.connectedDisplays()
+        if config.gameDir == nil || gameProblem != nil { checkGame() }
+        onLanguageChanged?()
     }
 
     var confURL: URL { layout.launchConfURL(env: env) }
@@ -133,13 +148,13 @@ final class LauncherModel: ObservableObject {
             try confFile.write(to: confURL)
             try settingsFile.write(to: settingsURL)
         } catch {
-            exitMessage = "Could not save the settings: \(error.localizedDescription)"
+            exitMessage = L("Could not save the settings: \(error.localizedDescription)")
         }
     }
 
     func checkGame() {
         guard let folder = config.gameDir else {
-            gameProblem = "Choose the game folder (CUSA03173 with update 1.09, the folder containing eboot.bin)."
+            gameProblem = L("Choose the game folder (CUSA03173 with update 1.09, the folder containing eboot.bin).")
             NSApplication.shared.applicationIconImage = nil
             return
         }
@@ -179,7 +194,7 @@ final class LauncherModel: ObservableObject {
     }
 
     func chooseGameFolder() {
-        guard let url = pickFolder("Choose your Bloodborne game folder (CUSA03173, the one containing eboot.bin).",
+        guard let url = pickFolder(L("Choose your Bloodborne game folder (CUSA03173, the one containing eboot.bin)."),
                                    start: config.gameDir) else { return }
         config.gameDir = url
         checkGame()
@@ -191,7 +206,7 @@ final class LauncherModel: ObservableObject {
     }
 
     func chooseSaveFolder() {
-        guard let url = pickFolder("Choose the folder for your saves.", start: saveDir) else { return }
+        guard let url = pickFolder(L("Choose the folder for your saves."), start: saveDir) else { return }
         setSaveFolder(url)
     }
 
@@ -205,15 +220,15 @@ final class LauncherModel: ObservableObject {
         }
         if SaveFolder.shouldOfferCopy(from: old, to: url) {
             let alert = NSAlert()
-            alert.messageText = "Copy your saves to the new folder?"
-            alert.informativeText = "Your saves in \(old.path) are copied to \(url.path). The originals stay where they are."
-            alert.addButton(withTitle: "Copy Saves")
-            alert.addButton(withTitle: "Don't Copy")
+            alert.messageText = L("Copy your saves to the new folder?")
+            alert.informativeText = L("Your saves in \(old.path) are copied to \(url.path). The originals stay where they are.")
+            alert.addButton(withTitle: L("Copy Saves"))
+            alert.addButton(withTitle: L("Don't Copy"))
             if alert.runModal() == .alertFirstButtonReturn {
                 do {
                     try SaveFolder.copySaves(from: old, to: url)
                 } catch {
-                    saveProblem = "Copying the saves failed: \(error.localizedDescription)"
+                    saveProblem = L("Copying the saves failed: \(error.localizedDescription)")
                     return
                 }
             }
@@ -226,29 +241,29 @@ final class LauncherModel: ObservableObject {
         guard !running, let game = config.gameDir else { return }
         save()
         if GameRunner.isGameRunning {
-            exitMessage = "Bloodborne is already running. Only one copy of the game can run at a time."
+            exitMessage = L("Bloodborne is already running. Only one copy of the game can run at a time.")
             onExit?(-1)
             return
         }
         if !GameRunner.hasRosetta {
             let alert = NSAlert()
-            alert.messageText = "Bloodborne needs Rosetta 2"
-            alert.informativeText = "The game runs its original PlayStation 4 code through Rosetta 2, Apple's translator for Intel code. Install it now? (macOS asks for an administrator password.)"
-            alert.addButton(withTitle: "Install")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = L("Bloodborne needs Rosetta 2")
+            alert.informativeText = L("The game runs its original PlayStation 4 code through Rosetta 2, Apple's translator for Intel code. Install it now? (macOS asks for an administrator password.)")
+            alert.addButton(withTitle: L("Install"))
+            alert.addButton(withTitle: L("Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { onExit?(-1); return }
             guard GameRunner.installRosetta() else {
-                exitMessage = "Rosetta 2 was not installed. In Terminal, run: softwareupdate --install-rosetta"
+                exitMessage = L("Rosetta 2 was not installed. In Terminal, run: softwareupdate --install-rosetta")
                 onExit?(-1)
                 return
             }
         }
         if let custom = config.saveDir, let problem = SaveFolder.problem(custom, create: false) {
             let alert = NSAlert()
-            alert.messageText = "The save folder is not available"
+            alert.messageText = L("The save folder is not available")
             alert.informativeText = problem
-            alert.addButton(withTitle: "Use Default")
-            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: L("Use Default"))
+            alert.addButton(withTitle: L("Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { onExit?(-1); return }
             config.saveDir = nil
             save()
@@ -268,7 +283,7 @@ final class LauncherModel: ObservableObject {
             exitMessage = nil
             onStarted?()
         } catch {
-            exitMessage = "The game could not start: \(error.localizedDescription)"
+            exitMessage = L("The game could not start: \(error.localizedDescription)")
             onExit?(-1)
         }
     }
@@ -280,26 +295,26 @@ final class LauncherModel: ObservableObject {
         guard !running, let game = config.gameDir else { return }
         if let benchmarkProblem {
             let alert = NSAlert()
-            alert.messageText = "The benchmark is not available"
+            alert.messageText = L("The benchmark is not available")
             alert.informativeText = benchmarkProblem
             alert.runModal()
             return
         }
         save()
         if GameRunner.isGameRunning {
-            exitMessage = "Bloodborne is already running. Quit the game before starting the benchmark."
+            exitMessage = L("Bloodborne is already running. Quit the game before starting the benchmark.")
             return
         }
         if !GameRunner.hasRosetta {
-            exitMessage = "The game needs Rosetta 2: press Play once to install it."
+            exitMessage = L("The game needs Rosetta 2: press Play once to install it.")
             return
         }
         if confirm {
             let alert = NSAlert()
-            alert.messageText = "Run the benchmark?"
-            alert.informativeText = "The game starts twice, about 6 minutes in all: a recorded walk through Central Yharnam, then 30 seconds standing still without a frame cap. Don't touch the game window, the keyboard or a controller while it runs: the walk is replayed, and any input would change it.\n\nThe benchmark uses its own save and fixed settings (1920 × 1080, upscaler off, windowed). Your saves and settings are not changed. The results open here when it's done."
-            alert.addButton(withTitle: "Start Benchmark")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = L("Run the benchmark?")
+            alert.informativeText = L("The game starts twice, about 6 minutes in all: a recorded walk through Central Yharnam, then 30 seconds standing still without a frame cap. Don't touch the game window, the keyboard or a controller while it runs: the walk is replayed, and any input would change it.\n\nThe benchmark uses its own save and fixed settings (1920 × 1080, upscaler off, windowed). Your saves and settings are not changed. The results open here when it's done.")
+            alert.addButton(withTitle: L("Start Benchmark"))
+            alert.addButton(withTitle: L("Cancel"))
             guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         let job = BenchmarkRunner.Job(layout: layout, gameDir: game, dataDir: dataDir,
@@ -317,7 +332,7 @@ final class LauncherModel: ObservableObject {
                 self.onExit?(0)
             })
         } catch {
-            exitMessage = "The benchmark could not start: \(error.localizedDescription)"
+            exitMessage = L("The benchmark could not start: \(error.localizedDescription)")
         }
     }
 
@@ -334,10 +349,10 @@ final class LauncherModel: ObservableObject {
             return true
         } catch {
             let alert = NSAlert()
-            alert.messageText = "Your save could not be backed up"
-            alert.informativeText = "The launcher backs up your save before the first launch with a new set of mods or cheats, and copying \(saveDir.path) to \(backups.path) failed: \(error.localizedDescription)"
-            alert.addButton(withTitle: "Play Anyway")
-            alert.addButton(withTitle: "Cancel")
+            alert.messageText = L("Your save could not be backed up")
+            alert.informativeText = L("The launcher backs up your save before the first launch with a new set of mods or cheats, and copying \(saveDir.path) to \(backups.path) failed: \(error.localizedDescription)")
+            alert.addButton(withTitle: L("Play Anyway"))
+            alert.addButton(withTitle: L("Cancel"))
             return alert.runModal() == .alertFirstButtonReturn
         }
     }
@@ -454,10 +469,10 @@ final class LauncherModel: ObservableObject {
     func askAboutUpdatesIfNeeded() {
         guard config.checkUpdates == nil else { return }
         let alert = NSAlert()
-        alert.messageText = "Check for updates automatically?"
-        alert.informativeText = "Bloodborne can look for a new version of this port on its GitHub releases page once a day, when the launcher opens. Nothing is downloaded or installed without asking you. You can change this in the update window (Bloodborne → Check for Updates…), which works either way."
-        alert.addButton(withTitle: "Check Automatically")
-        alert.addButton(withTitle: "Don't Check")
+        alert.messageText = L("Check for updates automatically?")
+        alert.informativeText = L("Bloodborne can look for a new version of this port on its GitHub releases page once a day, when the launcher opens. Nothing is downloaded or installed without asking you. You can change this in the update window (Bloodborne → Check for Updates…), which works either way.")
+        alert.addButton(withTitle: L("Check Automatically"))
+        alert.addButton(withTitle: L("Don't Check"))
         NSApp.activate()
         config.checkUpdates = alert.runModal() == .alertFirstButtonReturn
         save()

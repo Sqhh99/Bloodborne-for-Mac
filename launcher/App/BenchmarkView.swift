@@ -12,9 +12,9 @@ struct BenchmarkResultView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(result.summary.complete ? "Benchmark results" : "Benchmark stopped").font(.title2.bold())
+            Text(result.summary.complete ? L("Benchmark results") : L("Benchmark stopped")).font(.title2.bold())
             if !result.summary.complete {
-                Text("A pass did not finish; the report shows what was measured. The game's logs are in the results folder.")
+                Text(L("A pass did not finish; the report shows what was measured. The game's logs are in the results folder."))
                     .font(.callout).foregroundStyle(.secondary)
             }
             ScrollView {
@@ -25,16 +25,16 @@ struct BenchmarkResultView: View {
             .background(Color(nsColor: .textBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 6))
             HStack {
-                Button("Show in Finder", action: runner.showInFinder)
+                Button(L("Show in Finder"), action: runner.showInFinder)
                 Spacer()
                 if copied {
-                    Text("Copied").foregroundStyle(.secondary)
+                    Text(L("Copied")).foregroundStyle(.secondary)
                 }
-                Button("Copy Report") {
+                Button(L("Copy Report")) {
                     runner.copyReport()
                     copied = true
                 }
-                Button("Close") { dismiss() }
+                Button(L("Close")) { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
         }

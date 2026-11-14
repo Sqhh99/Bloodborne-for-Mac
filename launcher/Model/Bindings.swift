@@ -13,7 +13,8 @@ struct BindAction: Identifiable, Hashable {
 }
 
 /// The keyboard and mouse bindings: bbport.ini bind_<action>=Name,Name (SDL scancode names, the
-/// key's position, or a mouse name). An absent key is the default, an empty one unbinds.
+/// key's position, or a mouse name; "Left Shift+Mouse Left" is a chord: the second input while the
+/// first is held). An absent key is the default, an empty one unbinds.
 struct Bindings: Equatable {
     static let slots = 4
     static let mouseNames = ["Mouse Left", "Mouse Right", "Mouse Middle", "Mouse Back", "Mouse Forward",
@@ -26,27 +27,29 @@ struct Bindings: Equatable {
         BindAction(key: "bind_move_back", label: "Back", group: "Movement", defaults: ["S"]),
         BindAction(key: "bind_move_left", label: "Left", group: "Movement", defaults: ["A"]),
         BindAction(key: "bind_move_right", label: "Right", group: "Movement", defaults: ["D"]),
+        BindAction(key: "bind_dodge", label: "Dodge (tap Circle)", group: "Movement", defaults: ["Space"]),
+        BindAction(key: "bind_sprint", label: "Run (hold Circle)", group: "Movement", defaults: ["Left Shift"]),
         BindAction(key: "bind_walk", label: "Walk (hold)", group: "Movement", defaults: ["Left Alt"]),
-        BindAction(key: "bind_camera_up", label: "Up", group: "Camera", defaults: ["Up"]),
-        BindAction(key: "bind_camera_down", label: "Down", group: "Camera", defaults: ["Down"]),
-        BindAction(key: "bind_camera_left", label: "Left", group: "Camera", defaults: ["Left"]),
-        BindAction(key: "bind_camera_right", label: "Right", group: "Camera", defaults: ["Right"]),
-        BindAction(key: "bind_r1", label: "Attack (R1)", group: "Combat", defaults: ["Mouse Left", "3"]),
-        BindAction(key: "bind_r2", label: "Charged attack (R2)", group: "Combat", defaults: ["Mouse Back", "F"]),
-        BindAction(key: "bind_l1", label: "Transform weapon (L1)", group: "Combat", defaults: ["1", "Mouse Forward"]),
-        BindAction(key: "bind_l2", label: "Firearm (L2)", group: "Combat", defaults: ["Mouse Right", "R"]),
-        BindAction(key: "bind_circle", label: "Dodge, sprint (Circle)", group: "Combat", defaults: ["Left Shift", "Escape"]),
-        BindAction(key: "bind_r3", label: "Lock on (R3)", group: "Combat", defaults: ["Mouse Middle", "C"]),
-        BindAction(key: "bind_cross", label: "Interact, confirm (Cross)", group: "Actions", defaults: ["Space", "Return", "Keypad Enter"]),
-        BindAction(key: "bind_square", label: "Quick item (Square)", group: "Actions", defaults: ["E"]),
+        BindAction(key: "bind_camera_up", label: "Up", group: "Camera", defaults: ["I"]),
+        BindAction(key: "bind_camera_down", label: "Down", group: "Camera", defaults: ["K"]),
+        BindAction(key: "bind_camera_left", label: "Left", group: "Camera", defaults: ["J"]),
+        BindAction(key: "bind_camera_right", label: "Right", group: "Camera", defaults: ["L"]),
+        BindAction(key: "bind_r1", label: "Attack (R1)", group: "Combat", defaults: ["Mouse Left"]),
+        BindAction(key: "bind_r2", label: "Charged attack (R2)", group: "Combat", defaults: ["Left Shift+Mouse Left", "Mouse Back"]),
+        BindAction(key: "bind_l1", label: "Transform weapon (L1)", group: "Combat", defaults: ["E", "Mouse Forward"]),
+        BindAction(key: "bind_l2", label: "Firearm (L2)", group: "Combat", defaults: ["Mouse Right"]),
+        BindAction(key: "bind_r3", label: "Lock on (R3)", group: "Combat", defaults: ["C", "Mouse Middle"]),
+        BindAction(key: "bind_cross", label: "Interact, confirm (Cross)", group: "Actions", defaults: ["F", "Return", "Keypad Enter"]),
+        BindAction(key: "bind_circle", label: "Back (Circle)", group: "Actions", defaults: []),
+        BindAction(key: "bind_square", label: "Quick item (Square)", group: "Actions", defaults: ["Tab", "R"]),
         BindAction(key: "bind_triangle", label: "Blood Vial (Triangle)", group: "Actions", defaults: ["Q"]),
-        BindAction(key: "bind_l3", label: "L3", group: "Actions", defaults: ["Z"]),
-        BindAction(key: "bind_dpad_up", label: "Up", group: "D-pad", defaults: ["I"]),
-        BindAction(key: "bind_dpad_down", label: "Down", group: "D-pad", defaults: ["K"]),
-        BindAction(key: "bind_dpad_left", label: "Left (left-hand weapon)", group: "D-pad", defaults: ["J"]),
-        BindAction(key: "bind_dpad_right", label: "Right (right-hand weapon)", group: "D-pad", defaults: ["L"]),
-        BindAction(key: "bind_options", label: "Menu (Options)", group: "Menus", defaults: ["O", "F1"]),
-        BindAction(key: "bind_touch_left", label: "Gestures (touchpad left)", group: "Menus", defaults: ["Tab"]),
+        BindAction(key: "bind_l3", label: "L3", group: "Actions", defaults: ["Left Ctrl"]),
+        BindAction(key: "bind_dpad_up", label: "Up", group: "D-pad", defaults: ["3", "Up", "Wheel Up"]),
+        BindAction(key: "bind_dpad_down", label: "Down", group: "D-pad", defaults: ["4", "Down", "Wheel Down"]),
+        BindAction(key: "bind_dpad_left", label: "Left (left-hand weapon)", group: "D-pad", defaults: ["1", "Left"]),
+        BindAction(key: "bind_dpad_right", label: "Right (right-hand weapon)", group: "D-pad", defaults: ["2", "Right"]),
+        BindAction(key: "bind_options", label: "Menu (Options)", group: "Menus", defaults: ["Escape"]),
+        BindAction(key: "bind_touch_left", label: "Gestures (touchpad left)", group: "Menus", defaults: ["G"]),
         BindAction(key: "bind_touch_right", label: "Touchpad right side", group: "Menus", defaults: ["Backspace"]),
     ]
     static let groups = ["Movement", "Camera", "Combat", "Actions", "D-pad", "Menus"]
@@ -69,8 +72,20 @@ struct Bindings: Equatable {
         return Array(names.prefix(slots))
     }
 
+    /// A chord's held input and its key ("Left Shift+Mouse Left"), or nil for a plain name
+    /// ("Keypad +" is one key: nothing follows its plus).
+    static func chord(_ name: String) -> (held: String, key: String)? {
+        guard let plus = name.dropFirst().firstIndex(of: "+"), name.index(after: plus) < name.endIndex else { return nil }
+        return (name[..<plus].trimmingCharacters(in: .whitespaces),
+                name[name.index(after: plus)...].trimmingCharacters(in: .whitespaces))
+    }
+
     /// The spelling the game logs and the launcher writes, or nil if the game would ignore it.
     static func canonical(_ name: String) -> String? {
+        if let (held, key) = chord(name) {
+            guard let held = canonical(held), let key = canonical(key) else { return nil }
+            return held + "+" + key
+        }
         let all = mouseNames + KeyCodes.names
         guard let match = all.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }),
               !reserved.contains(match) else { return nil }

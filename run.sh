@@ -71,10 +71,29 @@ if [[ ${BB_MAC_SETTINGS:-1} != 0 || ${BB_EXIT_GAME:-1} != 0 ]]; then
         trap cleanup_mod_views EXIT
     fi
 fi
-"$PYTHON" scripts/prepare.py "$game" --out "$out"
-"$PYTHON" scripts/link_libc.py "$game" --out "$out"
-"$PYTHON" scripts/link_modules.py "$game" --out "$out"
-"$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
+# The prepared executable, its linked system modules and the AppContent profile depend only on
+# the game's eboot.bin, param.sfo and two modules and on the scripts that make them: about a
+# second of Python at every start for the same $out/boot-linked.bin, content.bin and eboot.elf.
+# They are kept between starts under a key of those files' sizes and times (mods cannot replace
+# them: scripts/mods.py refuses to). BB_PREPARE_CACHE=0 prepares again every time.
+prepare_key() {
+    printf 'v1 game=%s gs=%s sku=%s\n' "$(realpath "$original_game")" "${BBPORT_GS_SLOT:-}" "${BB_CONTENT_SKU:-full}"
+    stat -L -f '%z %Fm %N' scripts/prepare.py scripts/link_libc.py scripts/link_modules.py scripts/content_profile.py || return 1
+    (cd "$game" && stat -L -f '%z %Fm %N' eboot.bin sce_sys/param.sfo sce_module/libc.prx sce_module/libSceFios2.prx) || return 1
+}
+prepared_key=''
+if [[ ${BB_PREPARE_CACHE:-1} != 0 ]]; then prepared_key=$(prepare_key 2>/dev/null) || prepared_key=''; fi
+if [[ -n $prepared_key && -f $out/prepare.key && $(<"$out/prepare.key") == "$prepared_key" &&
+      -s $out/boot-linked.bin && -s $out/content.bin && -s $out/eboot.elf ]]; then
+    echo "Prepared game image: unchanged since the last start (BB_PREPARE_CACHE=0 prepares it again)"
+else
+    rm -f "$out/prepare.key" # (a failed step must not leave a key for half-written files)
+    "$PYTHON" scripts/prepare.py "$game" --out "$out"
+    "$PYTHON" scripts/link_libc.py "$game" --out "$out"
+    "$PYTHON" scripts/link_modules.py "$game" --out "$out"
+    "$PYTHON" scripts/content_profile.py "$game" --out "$out" --sku "${BB_CONTENT_SKU:-full}"
+    if [[ -n $prepared_key ]]; then printf '%s\n' "$prepared_key" > "$out/prepare.key"; fi
+fi
 # Sizes chosen below for the previous launch are recomputed after an in-game restart.
 if [[ ${BB_AUTO_RENDER_RES:-} == 1 ]]; then
     unset BB_RENDER_RES BB_OUTPUT_RES BB_AUTO_RENDER_RES
@@ -159,7 +178,22 @@ fi
 if [[ -n ${BB_PREBUILT:-} ]]; then
     probe=${BB_PROBE:-bin/bb-probe}
 else
-    bash build_macos.sh
+    # A checkout builds what changed, and only then: building at every start took about 2 s, and
+    # the freshly linked bb-probe and bbgpu-host then cost 1.5 to 4 s more, since macOS checks
+    # new binaries and Rosetta translates them again (measured: 0.03 s to the GPU host with
+    # unchanged binaries). out/.built is build_macos.sh's stamp. BB_BUILD=always builds every
+    # time, BB_BUILD=never runs what is there.
+    stale=''
+    if [[ ${BB_BUILD:-auto} == always || ! -f out/.built || ! -x out/bb-probe || ! -x out/bbgpu-host ]]; then
+        stale=1
+    elif [[ ${BB_BUILD:-auto} != never ]]; then
+        stale=$(find src host gpu third_party/LibAtrac9 deps/x86_64/.built-* deps/arm64/.built-* build_macos.sh \
+            scripts/macos/build_gpu_arm64.sh -newer out/.built -type f -print -quit 2>/dev/null) || true
+    fi
+    if [[ -n $stale ]]; then
+        [[ $stale == 1 ]] || echo "Building: $stale changed since the last build"
+        bash build_macos.sh
+    fi
     probe=out/bb-probe
 fi
 probe_args=("$out/boot-linked.bin" --content-profile "$out/content.bin" --patches "$out/patches.bin" --app0 "$game" --user "${BB_USER_DIR:-$data/user}" --timeout "${BB_TIMEOUT:-0}" "$@")

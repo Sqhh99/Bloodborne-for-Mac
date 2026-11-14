@@ -50,11 +50,11 @@ enum Resolution {
         let gib: UInt64 = 1024 * 1024 * 1024
         if size == PixelSize(5120, 2160) {
             guard memoryBytes < 32 * gib else { return nil }
-            return "5120 × 2160 needs about 9 GB of graphics memory. On Macs with less than 32 GB of memory expect slowdowns, missing textures or crashes. 3440 × 1440 is the same shape and much lighter."
+            return L("5120 × 2160 needs about 9 GB of graphics memory. On Macs with less than 32 GB of memory expect slowdowns, missing textures or crashes. 3440 × 1440 is the same shape and much lighter.")
         }
         guard memoryBytes < 24 * gib,
               [PixelSize(3440, 1440), PixelSize(5120, 1440), PixelSize(2560, 1600)].contains(size) else { return nil }
-        return "This resolution may exceed available graphics memory on Macs with less than 24 GB of memory, causing slowdowns or crashes. Try a smaller resolution of the same shape if this happens."
+        return L("This resolution may exceed available graphics memory on Macs with less than 24 GB of memory, causing slowdowns or crashes. Try a smaller resolution of the same shape if this happens.")
     }
     /// Upscaler quality levels (bbport_settings.cpp PresetName / PresetScale).
     static let presetNames = ["Native AA", "Quality", "Balanced", "Performance", "Ultra Performance"]

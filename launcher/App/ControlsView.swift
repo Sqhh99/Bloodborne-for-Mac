@@ -22,29 +22,29 @@ struct ControlsView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             Form {
-                Section("Mouse") {
-                    Toggle("Mouse camera", isOn: $model.settings.mouseLook)
-                        .help("Click in the game window to turn the camera with the mouse; \u{2318} gives the cursor back. Controllers always work.")
-                    NumberSlider(label: "Sensitivity", value: $model.settings.mouseSensitivity, range: 0.1...10, format: "%.1f",
-                                 help: "How far the camera turns for a mouse movement.")
-                    NumberSlider(label: "Vertical speed", value: $model.settings.mouseVertical, range: 0.25...4, format: "%.2f\u{00D7}",
-                                 help: "How fast the camera turns up and down, relative to left and right.")
-                    Toggle("Invert vertical", isOn: $model.settings.mouseInvertY)
-                    Text("Turning still too slow? Raise Camera speed in the game's own options too. Mouse buttons and the wheel reach the game while it holds the cursor. The in-game menu (\u{2318},) has these sliders too, live.")
+                Section(L("Mouse")) {
+                    Toggle(L("Mouse camera"), isOn: $model.settings.mouseLook)
+                        .help(L("Click in the game window to turn the camera with the mouse; \u{2318} gives the cursor back. Controllers always work."))
+                    NumberSlider(label: L("Sensitivity"), value: $model.settings.mouseSensitivity, range: 0.1...10, format: "%.1f",
+                                 help: L("How far the camera turns for a mouse movement."))
+                    NumberSlider(label: L("Vertical speed"), value: $model.settings.mouseVertical, range: 0.25...4, format: "%.2f\u{00D7}",
+                                 help: L("How fast the camera turns up and down, relative to left and right."))
+                    Toggle(L("Invert vertical"), isOn: $model.settings.mouseInvertY)
+                    Text(L("Turning still too slow? Raise Camera speed in the game's own options too. Mouse buttons and the wheel reach the game while it holds the cursor. The in-game menu (\u{2318},) has these sliders too, live."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Section("Keyboard") {
-                    Toggle("Camera keys are the d-pad with the mouse camera", isOn: $model.settings.cameraKeysDpad)
+                Section(L("Keyboard")) {
+                    Toggle(L("Camera keys are the d-pad with the mouse camera"), isOn: $model.settings.cameraKeysDpad)
                         .disabled(!model.settings.mouseLook)
-                        .help("While the mouse turns the camera, the camera keys (the arrow keys by default) scroll menus and switch weapons and items instead.")
+                        .help(L("While the mouse turns the camera, the camera keys (I, J, K and L by default) scroll menus and switch weapons and items instead."))
                 }
-                Section("Controller") {
-                    Toggle("L3 + R3 opens the in-game menu", isOn: $model.settings.padMenuCombo)
-                        .help("Pressing both sticks in opens the settings menu during play. Turn it off if you press them by accident; \u{2318}, still opens it.")
-                    LabeledContent(model.settings.padBindings.isDefault ? "Buttons as on a PlayStation pad" : "Buttons remapped") {
-                        Button("Controller Buttons\u{2026}") { showPadButtons = true }
+                Section(L("Controller")) {
+                    Toggle(L("L3 + R3 opens the in-game menu"), isOn: $model.settings.padMenuCombo)
+                        .help(L("Pressing both sticks in opens the settings menu during play. Turn it off if you press them by accident; \u{2318}, still opens it."))
+                    LabeledContent(model.settings.padBindings.isDefault ? L("Buttons as on a PlayStation pad") : L("Buttons remapped")) {
+                        Button(L("Controller Buttons\u{2026}")) { showPadButtons = true }
                     }
-                    .help("Choose what each controller button does in the game.")
+                    .help(L("Choose what each controller button does in the game."))
                 }
                 groups(["Movement", "Camera"])
             }
@@ -53,10 +53,10 @@ struct ControlsView: View {
                 groups(["Combat", "Actions", "D-pad", "Menus"])
                 Section {
                     HStack {
-                        Text("A key can do several things; \u{2318} is kept for Mac shortcuts.")
+                        Text(L("A key can do several things; \u{2318} is kept for Mac shortcuts."))
                             .font(.caption).foregroundStyle(.secondary)
                         Spacer()
-                        Button("Reset to Defaults") { model.settings.bindings = Bindings() }
+                        Button(L("Reset to Defaults")) { model.settings.bindings = Bindings() }
                             .disabled(model.settings.bindings.isDefault)
                     }
                 }
@@ -80,7 +80,7 @@ struct ControlsView: View {
 
     private func groups(_ names: [String]) -> some View {
         ForEach(names, id: \.self) { group in
-            Section(group) {
+            Section(L(dynamic: group)) {
                 ForEach(Bindings.actions.filter { $0.group == group }) { action in
                     row(action)
                 }
@@ -97,7 +97,7 @@ struct ControlsView: View {
             HStack(spacing: 4) {
                 if !shared.isEmpty {
                     Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                        .help("Also used by: " + shared.map { "\($0.group) \u{2013} \($0.label)" }.joined(separator: ", "))
+                        .help(L("Also used by: ") + shared.map { "\(L(dynamic: $0.group)) \u{2013} \(L(dynamic: $0.label))" }.joined(separator: ", "))
                 }
                 ForEach(0..<shown, id: \.self) { slot in
                     let name = slot < names.count ? names[slot] : nil
@@ -106,11 +106,11 @@ struct ControlsView: View {
                             .frame(minWidth: slot < 2 ? 70 : 16)
                             .foregroundStyle(name == nil ? .secondary : .primary)
                     }
-                    .help(name.map { "\($0) \u{2013} click to change" } ?? "Click, then press a key or mouse button")
+                    .help(name.map { L("\(KeyLabel.text($0)) \u{2013} click to change") } ?? L("Click, then press a key or mouse button"))
                 }
             }
         } label: {
-            Text(action.label)
+            Text(L(dynamic: action.label))
         }
     }
 }
@@ -134,30 +134,30 @@ private struct PadButtonsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Controller Buttons").font(.headline)
-            Text(controller.map { "\($0): click a slot, then press the button you want for it." }
-                 ?? "Connect a controller, then click a slot and press the button you want for it.")
+            Text(L("Controller Buttons")).font(.headline)
+            Text(controller.map { L("\($0): click a slot, then press the button you want for it.") }
+                 ?? L("Connect a controller, then click a slot and press the button you want for it."))
                 .font(.caption).foregroundStyle(controller == nil ? .orange : .secondary)
             Grid(alignment: .leading, verticalSpacing: 6) {
                 ForEach(PadBindings.actions) { action in
                     GridRow {
-                        Text(action.label).lineLimit(1).frame(width: 230, alignment: .leading)
+                        Text(L(dynamic: action.label)).lineLimit(1).frame(width: 230, alignment: .leading)
                         row(action)
                     }
                 }
             }
             HStack {
-                Button("Reset to Defaults") { listening = nil; bindings = PadBindings() }
+                Button(L("Reset to Defaults")) { listening = nil; bindings = PadBindings() }
                     .disabled(bindings.isDefault)
                 if let listening {
-                    Button("Clear Slot") {
+                    Button(L("Clear Slot")) {
                         bindings.set(listening.action, slot: listening.slot, to: nil)
                         self.listening = nil
                     }
                     .disabled(listening.slot >= bindings[listening.action].count)
                 }
                 Spacer()
-                Button("Done") { listening = nil; done() }.keyboardShortcut(.defaultAction)
+                Button(L("Done")) { listening = nil; done() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(20)
@@ -177,17 +177,17 @@ private struct PadButtonsSheet: View {
                 Button {
                     listening = waiting ? nil : Listening(action: action, slot: slot)
                 } label: {
-                    Text(waiting ? "Press\u{2026}" : name ?? (slot >= 2 ? "+" : "\u{2013}"))
+                    Text(waiting ? L("Press\u{2026}") : name ?? (slot >= 2 ? "+" : "\u{2013}"))
                         .lineLimit(1)
                         .frame(width: name == nil && slot >= 2 && !waiting ? 16 : 84)
                         .foregroundStyle(waiting ? Color.accentColor : name == nil ? .secondary : .primary)
                 }
-                .help(name.map { PadBindings.label($0) + " \u{2013} click, then press a controller button" }
-                      ?? "Click, then press a controller button")
+                .help(name.map { L("\(L(dynamic: PadBindings.label($0))) \u{2013} click, then press a controller button") }
+                      ?? L("Click, then press a controller button"))
             }
             Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
                 .opacity(shared.isEmpty ? 0 : 1)
-                .help("Also used by: " + shared.map(\.label).joined(separator: ", "))
+                .help(L("Also used by: ") + shared.map { L(dynamic: $0.label) }.joined(separator: ", "))
         }
     }
 
@@ -195,7 +195,7 @@ private struct PadButtonsSheet: View {
     /// clicked has to be let go first).
     private func sample() {
         let pad = GCController.current ?? GCController.controllers().first
-        controller = pad.map { $0.vendorName ?? "Controller" }
+        controller = pad.map { $0.vendorName ?? L("Controller") }
         let now = pad.map(Self.pressed) ?? []
         if let listening, let name = PadBindings.buttons.first(where: { now.contains($0) && !held.contains($0) }) {
             bindings.set(listening.action, slot: listening.slot, to: name)
@@ -253,7 +253,9 @@ private struct NumberSlider: View {
     }
 }
 
-/// Waits for one key, mouse button or wheel turn in its box; Clear empties the slot.
+/// Waits for one key, mouse button or wheel turn in its box; Clear empties the slot. A modifier
+/// (Shift, Option, Control) binds when it is let go; another key or a mouse button pressed while
+/// it is held binds the two as a chord ("Left Shift+Mouse Left").
 private struct CaptureSheet: View {
     let action: BindAction
     let slot: Int
@@ -262,34 +264,46 @@ private struct CaptureSheet: View {
     let cancel: () -> Void
     @State private var message: String?
     @State private var monitor: Any?
+    @State private var heldModifier: String?
+
+    private func bind(_ name: String) {
+        done(heldModifier.map { $0 + "+" + name } ?? name)
+    }
 
     var body: some View {
         VStack(spacing: 14) {
-            Text("\(action.group): \(action.label)").font(.headline)
-            CaptureArea { name in done(name) } refuse: { message = $0 }
+            Text("\(L(dynamic: action.group)): \(L(dynamic: action.label))").font(.headline)
+            CaptureArea { name in bind(name) } refuse: { message = $0 }
                 .frame(width: 360, height: 120)
                 .overlay {
                     VStack(spacing: 6) {
-                        Text("Press a key, click a mouse button or turn the wheel here")
-                        if let current { Text("Now: \(KeyLabel.text(current))").foregroundStyle(.secondary) }
+                        if let heldModifier {
+                            Text(L("\(KeyLabel.text(heldModifier)): let go for this key alone, or press another key or mouse button with it"))
+                                .multilineTextAlignment(.center)
+                        } else {
+                            Text(L("Press a key, click a mouse button or turn the wheel here"))
+                        }
+                        if let current { Text(L("Now: \(KeyLabel.text(current))")).foregroundStyle(.secondary) }
                     }
                     .allowsHitTesting(false)
                 }
                 .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
             if let message { Text(message).font(.caption).foregroundStyle(.orange) }
             HStack {
-                Button("Clear") { done(nil) }.disabled(current == nil)
+                Button(L("Clear")) { done(nil) }.disabled(current == nil)
                 Spacer()
-                Button("Cancel", action: cancel)
+                Button(L("Cancel"), action: cancel)
             }
         }
         .padding(20)
         .frame(width: 400)
         .onAppear {
-            // Every key goes to the binding, Esc and Return too (Esc is Circle by default).
+            // Every key goes to the binding, Esc and Return too (Esc is the menu by default).
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
                 switch KeyLabel.name(for: event) {
-                case .bound(let name): done(name)
+                case .bound(let name): bind(name)
+                case .modifier(let name): heldModifier = name; message = nil
+                case .released(let name): if heldModifier == name { heldModifier = nil; done(name) }
                 case .refused(let why): message = why
                 case .ignored: break
                 }
@@ -336,10 +350,12 @@ private struct CaptureArea: NSViewRepresentable {
 
 /// Names for keys: the ini's SDL names and what the launcher shows.
 enum KeyLabel {
-    enum Result { case bound(String), refused(String), ignored }
+    enum Result { case bound(String), modifier(String), released(String), refused(String), ignored }
 
-    /// A key press (keyDown, or a modifier going down in flagsChanged) as a binding.
+    /// A key press as a binding: keyDown, or in flagsChanged a modifier going down (the first half
+    /// of a chord, or the binding itself once it is let go).
     static func name(for event: NSEvent) -> Result {
+        var modifier = false
         if event.type == .flagsChanged {
             let flag: NSEvent.ModifierFlags? = switch Int(event.keyCode) {
             case kVK_Shift, kVK_RightShift: .shift
@@ -349,13 +365,16 @@ enum KeyLabel {
             case kVK_CapsLock: nil // each press toggles it: take either
             default: .function
             }
-            if let flag, !event.modifierFlags.contains(flag) { return .ignored } // released
+            if let flag, !event.modifierFlags.contains(flag) {
+                return KeyCodes.name(keyCode: event.keyCode).map(Result.released) ?? .ignored
+            }
+            modifier = flag != nil
         }
         guard let name = KeyCodes.name(keyCode: event.keyCode) else {
-            return .refused("The game can't read that key.")
+            return .refused(L("The game can't read that key."))
         }
-        if Bindings.reserved.contains(name) { return .refused("\u{2318} is kept for Mac shortcuts (and gives the cursor back).") }
-        return .bound(name)
+        if Bindings.reserved.contains(name) { return .refused(L("\u{2318} is kept for Mac shortcuts (and gives the cursor back).")) }
+        return modifier ? .modifier(name) : .bound(name)
     }
 
     private static let fixed: [String: String] = [
@@ -373,7 +392,8 @@ enum KeyLabel {
     /// What is printed on the key in the current keyboard layout (letters, digits, symbols), else
     /// a readable name.
     static func text(_ name: String) -> String {
-        if let label = fixed[name] { return label }
+        if let (held, key) = Bindings.chord(name) { return text(held) + " + " + text(key) }
+        if let label = fixed[name] { return L(dynamic: label) }
         if name.count == 1, let code = KeyCodes.keyCode(name: name), let typed = typed(code) { return typed }
         return name
     }

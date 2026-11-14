@@ -45,15 +45,15 @@ enum SaveFolder {
         let fm = FileManager.default
         var isDirectory: ObjCBool = false
         if !fm.fileExists(atPath: url.path, isDirectory: &isDirectory) {
-            guard create else { return "The save folder \(url.path) is missing (is its drive connected?)." }
+            guard create else { return L("The save folder \(url.path) is missing (is its drive connected?).") }
             do {
                 try fm.createDirectory(at: url, withIntermediateDirectories: true)
             } catch {
-                return "Cannot create \(url.path): \(error.localizedDescription)"
+                return L("Cannot create \(url.path): \(error.localizedDescription)")
             }
         } else if !isDirectory.boolValue {
-            return "\(url.path) is a file, not a folder."
+            return L("\(url.path) is a file, not a folder.")
         }
-        return fm.isWritableFile(atPath: url.path) ? nil : "\(url.path) is not writable."
+        return fm.isWritableFile(atPath: url.path) ? nil : L("\(url.path) is not writable.")
     }
 }

@@ -266,8 +266,8 @@ final class BenchmarkRunner: ObservableObject {
         }
         sampler.start()
         self.sampler = sampler
-        let what = pass == .traversal ? "route" : "uncapped"
-        progress = "Benchmark: pass \(passIndex + 1) of \(BenchmarkPass.allCases.count), \(what)…"
+        let what = pass == .traversal ? L("route") : L("uncapped")
+        progress = L("Benchmark: pass \(passIndex + 1) of \(BenchmarkPass.allCases.count), \(what)…")
         if passIndex == 0 { onStarted?() }
     }
 

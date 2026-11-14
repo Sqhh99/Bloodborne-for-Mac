@@ -2555,3 +2555,58 @@ frame pool peak 8 of 256 KiB (3%), last new peak at frame 212k; 60 FPS and 6-11 
 frame from start to end (no #55-style drift). The owner checked glare and lens flares (no visible
 change) and played 36 min on their own save at 1440p (frame pool peak 7 KiB, normal exit).
 Shipped in 0.5.14.
+
+## 2026-11-13: start time from a checkout (M6, 24 GB, macOS 27.2.1)
+
+Question: bloodborne-mac starts much faster; what can be taken from it? Measured on the three
+session logs of that day (checkout app, `scripts/macos/make_app.sh`) and by hand.
+
+Where a start went, launcher's Play to the game's first instruction (7.6 s, 5.4 s and 7.6 s):
+
+| Phase | Time | |
+|---|---|---|
+| Python: game check, mods, Mac menu view | 0.25 s | |
+| Python: prepare.py, link_libc.py, link_modules.py, content_profile.py | 0.97 s | same output every start |
+| Python: patches.py | 0.06 s | |
+| `build_macos.sh` with nothing to build | 2.3 to 2.7 s | cmake configure twice, 30 C files compiled, three links |
+| bb-probe until "GPU process: starting" | 1.35 to 4.3 s | silent: see below |
+| GPU host, window, pipeline cache | 0.8 to 2.1 s | |
+
+The silent gap is the cost of new binaries, not of the game: `build_macos.sh` links bb-probe,
+bbgpu-host and bbgpu-host-macos27 again at every start, and a binary macOS has not run before
+is checked (and an x86-64 one translated by Rosetta) on its first start. By hand, `out/bb-probe`
+with no arguments (reserves the guest range, starts the GPU host, prints its usage):
+
+| | Time |
+|---|---|
+| binaries unchanged | 0.03 s |
+| bb-probe copied to a new file (same bytes) | 0.42 s |
+| first run after a build (new bb-probe and bbgpu-host; host "ready in 1209 ms") | 1.68 s |
+| x86-64 libbbgpu.dylib copied to a new file | 1.01 s |
+| first `dlopen` of a newly built x86-64 libbbgpu.dylib (13.5 MB) | 2.5 s, then 4 ms |
+
+Changes (run.sh, build_macos.sh):
+- **Build only when a source changed.** `build_macos.sh` touches `out/.built`; `run.sh` builds
+  when a file under src, host, gpu, third_party/LibAtrac9, the dependency stamps or the build
+  scripts is newer (a 10 ms `find`), or when a binary is missing. `BB_BUILD=always|never`.
+  bloodborne-mac goes further (its run.sh never builds); here a checkout still builds what
+  changed, as before. The release app (`BB_PREBUILT=1`) never built and is unchanged by this.
+- **Keep the prepared image.** `$out/boot-linked.bin`, `content.bin` and `eboot.elf` depend only
+  on eboot.bin, param.sfo, libc.prx, libSceFios2.prx and the four scripts; `$out/prepare.key`
+  holds their sizes and times, and an unchanged key skips the four steps. `BB_PREPARE_CACHE=0`.
+  This one also helps the release app.
+
+Result, `bash run.sh` on scratch data until "Entering original x86-64 code" (same Mac, warm
+file cache, the game stopped 5 s later):
+
+| | Game code starts after |
+|---|---|
+| before (`BB_BUILD=always BB_PREPARE_CACHE=0`) | 5.24 s (Python 1.2 s, build 2.8 s, new binaries 0.5 s, window 0.6 s) |
+| first start after a build | 1.5 to 2.0 s |
+| every later start | 0.60 to 0.62 s (Python 0.32 s, window 0.2 s) |
+
+What bloodborne-mac does that was not taken: it prepares, links and patches the game in C
+inside the game process (no Python at all), and it runs the game's code natively on arm64
+(bbcpu and the recompiler), so there is no Rosetta translation of its own binaries. The first
+is a port of several thousand lines (backlog, Performance); the second is a different
+architecture (decision 1 in CLAUDE.md).

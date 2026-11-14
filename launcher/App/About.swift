@@ -34,17 +34,17 @@ enum About {
             if secondary { attributes[.foregroundColor] = NSColor.secondaryLabelColor }
             text.append(NSAttributedString(string: s, attributes: attributes))
         }
-        add("macOS port of the native Bloodborne PC port: the original PS4 game code runs through Rosetta 2, the graphics on Metal.\n")
-        add("Built on bbport by deadinside28, the Windows port by Mrsuss60 and the shadPS4 video core.\n")
+        add(L("macOS port of the native Bloodborne PC port: the original PS4 game code runs through Rosetta 2, the graphics on Metal.") + "\n")
+        add(L("Built on bbport by deadinside28, the Windows port by Mrsuss60 and the shadPS4 video core.") + "\n")
         if let commit, !commit.isEmpty {
-            add("Commit ", secondary: true)
+            add(L("Commit") + " ", secondary: true)
             add(commit, link: Updates.repositoryPage.appendingPathComponent("commit/\(commit)"))
             add(" · ", secondary: true)
         }
-        add("Source code", link: Updates.repositoryPage)
+        add(L("Source code"), link: Updates.repositoryPage)
         add(" · ", secondary: true)
-        add("Releases", link: Updates.repositoryPage.appendingPathComponent("releases"))
-        add("\nYou need your own copy of the game. Not affiliated with FromSoftware or Sony Interactive Entertainment.",
+        add(L("Releases"), link: Updates.repositoryPage.appendingPathComponent("releases"))
+        add("\n" + L("You need your own copy of the game. Not affiliated with FromSoftware or Sony Interactive Entertainment."),
             secondary: true)
         return text
     }

@@ -2,13 +2,16 @@
 /* libScePad on SDL3 gamepads, with a keyboard fallback. SDL events are pumped
  * by the window thread (gpu/shim/window.cpp); here state is only sampled.
  *
- * Keyboard and mouse buttons (beside a gamepad): bbport.ini bind_ keys, runtime_bindings.c (the
- * defaults: WASD left stick, arrow keys right stick, Space Cross, LShift Circle, E Square,
- * Q Triangle, 1 L1, 3 R1, R L2, F R2, Z L3, C R3, O Options, Tab / Backspace touchpad left / right,
- * IJKL d-pad, Left Alt walk).
+ * Keyboard and mouse buttons (beside a gamepad): bbport.ini bind_ keys, runtime_bindings.c. The
+ * defaults are Dark Souls III's PC layout, as in bloodborne-mac: WASD the left stick, IJKL the
+ * right stick (the camera), Space the dodge (a short Circle press: never a run), Left Shift the
+ * run (Circle held), Shift + Space the jump, F and Enter Cross, Q Triangle, Tab and R Square, E L1,
+ * C R3, Left Ctrl L3, Left Alt walk, Escape Options, G / Backspace touchpad left / right, the
+ * d-pad on 1 (left), 2 (right), 3 (up), 4 (down) and the arrow keys.
  * Controller buttons: bbport.ini bind_pad_ keys (remap_buttons).
  * Mouse (split mode, after a click in the window): the camera (right stick); by default left
- * button R1, right L2, middle R3, side buttons R2 and L1; the camera keys are then the d-pad. */
+ * button R1, Shift + left R2, right L2, middle R3, side buttons R2 (back) and L1 (forward), the
+ * wheel the d-pad's up and down. */
 #define _GNU_SOURCE
 #include "runtime.h"
 #include "gpu/bbgpu.h"
@@ -130,6 +133,31 @@ static void remap_buttons(PadData *d, uint32_t held, uint8_t l2, uint8_t r2) {
         }
     }
 }
+/* Circle from the keyboard (bloodborne-mac's keyboard_circle). The dodge is a short press whatever
+ * the key does: held, it would be the run (the game tells a tap from a hold by the time). The
+ * sprint key holds Circle: the run. The dodge key while the sprint key is held is the jump: the
+ * way a player gets it with a pad, Circle let go, pressed, let go, then held again (the run goes
+ * on). One release and press only stopped the run and gave no jump. */
+#define DODGE_PULSE_US 90000u
+#define JUMP_GAP_US 70000u /* each pause */
+#define JUMP_TAP_US 70000u /* the press between them */
+static uint64_t dodge_pulse_until, jump_start_us;
+static int dodge_was_down;
+static int keyboard_circle(int dodge, int sprint, uint64_t now) {
+    const uint64_t jump_us=2u*JUMP_GAP_US+JUMP_TAP_US;
+    const int jumping=jump_start_us && now<jump_start_us+jump_us;
+    if (dodge && !dodge_was_down && !jumping) {
+        if (sprint) { jump_start_us=now; dodge_pulse_until=0; }
+        else { dodge_pulse_until=now+DODGE_PULSE_US; jump_start_us=0; }
+    }
+    dodge_was_down=dodge;
+    if (jump_start_us && now<jump_start_us+jump_us) {
+        const uint64_t t=now-jump_start_us;
+        return t>=JUMP_GAP_US && t<JUMP_GAP_US+JUMP_TAP_US; /* low, the press, low */
+    }
+    return sprint || now<dodge_pulse_until;
+}
+
 static void sample_devices(PadData *d) {
     memset(d,0,sizeof(*d));
     d->left_x=d->left_y=d->right_x=d->right_y=128;
@@ -180,7 +208,7 @@ static void sample_devices(PadData *d) {
      * mouse button does comes from bbport.ini bind_ keys (runtime_bindings.c). */
     if (k && (k[SDL_SCANCODE_LGUI] || k[SDL_SCANCODE_RGUI])) k=NULL;
     const uint32_t mouse=mouse_inputs();
-    if (!k && !mouse) return;
+    if (!k && !mouse) { dodge_was_down=0; return; }
     const uint64_t held=runtime_bindings_held(k,mouse);
 #define HELD(a) ((held>>(a))&1)
     static const struct { int action; uint32_t ps; } buttons[]={
@@ -190,6 +218,7 @@ static void sample_devices(PadData *d) {
         {BIND_OPTIONS,BTN_OPTIONS},
     };
     for (size_t i=0;i<sizeof(buttons)/sizeof(*buttons);++i) if (HELD(buttons[i].action)) d->buttons|=buttons[i].ps;
+    if (keyboard_circle(HELD(BIND_DODGE),HELD(BIND_SPRINT),d->timestamp)) d->buttons|=BTN_CIRCLE;
     if (HELD(BIND_TOUCH_LEFT)) touch_click(d,0);
     if (HELD(BIND_TOUCH_RIGHT)) touch_click(d,1);
     if (HELD(BIND_L2)) d->l2=255;

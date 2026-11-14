@@ -4,6 +4,8 @@
  * lists up to BIND_SLOTS inputs, comma-separated, by SDL scancode name ("Space", "Left Shift",
  * "W") or mouse name ("Mouse Left", "Mouse Right", "Mouse Middle", "Mouse Back", "Mouse Forward",
  * "Wheel Up", "Wheel Down"). An absent key keeps the default, an empty one unbinds the action.
+ * An input may be a chord, "Left Shift+Mouse Left": it counts while both are held, and the
+ * second input's plain bindings do not count meanwhile (Shift+click is R2, not R2 and R1).
  * Scancodes are key positions, so other keyboard layouts keep the same shape. Cmd is reserved
  * (Mac shortcuts, it gives the cursor back). The launcher's Controls page writes these keys
  * (launcher/Model/Bindings.swift: same actions, names and defaults). */
@@ -20,6 +22,9 @@ enum {
     BIND_R1, BIND_R2, BIND_L1, BIND_L2, BIND_R3, BIND_L3,
     BIND_DPAD_UP, BIND_DPAD_DOWN, BIND_DPAD_LEFT, BIND_DPAD_RIGHT,
     BIND_OPTIONS, BIND_TOUCH_LEFT, BIND_TOUCH_RIGHT,
+    /* Circle by what it does (runtime_pad.c keyboard_circle): a tap whatever the key does (the
+     * dodge), Circle held (the run), and both together the jump. BIND_CIRCLE is the plain button. */
+    BIND_DODGE, BIND_SPRINT,
     BIND_COUNT
 };
 
@@ -49,8 +54,8 @@ enum {
 void runtime_bindings_load(const char *ini_path);
 /* The actions held (bit per BIND_*), from SDL's keyboard state (NULL: none) and the mouse mask. */
 uint64_t runtime_bindings_held(const bool *keys, uint32_t mouse);
-/* bbport.ini camera_keys_dpad (default on): while the mouse turns the camera, the camera keys
- * press the d-pad instead (the arrow keys then scroll menus and switch weapons and items). */
+/* bbport.ini camera_keys_dpad (default off: the arrow keys are the d-pad already): while the
+ * mouse turns the camera, the camera keys press the d-pad instead. */
 bool runtime_bindings_camera_keys_dpad(void);
 /* Whether any action is bound to the wheel (only then are wheel steps turned into presses). */
 bool runtime_bindings_use_wheel(void);
@@ -61,7 +66,7 @@ int runtime_bindings_pad(int input, int slot);
 const char *runtime_bindings_pad_key(int input);
 const char *runtime_bindings_pad_default(int input);
 const char *runtime_bindings_pad_name(int button);
-/* The ini key of an action ("bind_cross") and its default list ("Space,Return,Keypad Enter"),
+/* The ini key of an action ("bind_cross") and its default list ("F,Return,Keypad Enter"),
  * for logs and tests. */
 const char *runtime_bindings_key(int action);
 const char *runtime_bindings_default(int action);

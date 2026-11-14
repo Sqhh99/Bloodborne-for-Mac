@@ -594,6 +594,14 @@ Each item: what was done for now, what the refinement is, and where it lives.
 
 ## 2. Performance
 
+- **Start time: prepare the game in the game process (2026-11-13).** After the build-on-change
+  and prepared-image cache (FINDINGS 2026-11-13) a warm start still runs about 0.35 s of Python
+  (`game_check.py` 0.1 s, `mods.py` 0.05 s, `mac_menu.py` 0.13 s, `patches.py` 0.06 s) and a
+  cold one 1.3 s. bloodborne-mac does all of it in C inside the game (`runtime_prepare.c`,
+  `runtime_patches.c`: no bash or Python on the way, which iOS also needs). Port that if start
+  time matters more; the merged mod view (links per start) could also be kept while mods.json and
+  the mod folders are unchanged.
+
 - **Watch after 0.5.11: performance reports against #98 (2026-10-29, owner).** #98 guards
   GPU-thread descriptor reads with a local fault recovery (`gpu/shim/bbport_guest_memory.h`):
   about 2.4 ns more per read on an M4 Max, estimated ~0.1% of a 60 FPS frame on slower Macs, and
@@ -891,6 +899,20 @@ Each item: what was done for now, what the refinement is, and where it lives.
   them. A correct one must leave texture-watched pages to the renderer.
 
 ## 3. Mac GUI
+
+- **Languages: what is still English (2026-11-13).** The launcher is in English, Japanese and
+  Simplified Chinese (`launcher/Model/Localization.swift`, `Strings.swift`). Not translated: the
+  in-game overlay (⌘,; ImGui with SFNS.ttf: needs a CJK font and glyph ranges first), the game's
+  Mac Settings page (`scripts/mac_menu_messages.json`, English captions in every game language),
+  cheat and patch names (from `scripts/patches.py` and the patch files), the updater's and the
+  benchmark's rarer error messages, crash reports and logs (read by maintainers). Traditional
+  Chinese falls back to the Simplified text. A language change while the Mods & Cheats window
+  is open shows there after it is opened again.
+- **Escape as "back" in the game's menus (2026-11-13).** With the Dark Souls III layout Escape
+  is Options: it opens the menu and closes it, and Space or Left Shift goes back one level.
+  bloodborne-mac makes Escape Circle while a game menu is open (its `bbgpu_pointer_wanted`);
+  this port has no signal for "a game menu is open". Find one (the menu's open flag in the
+  game, as `src/runtime_mac_settings.c` hooks the menu), then port that and its clicks in menus.
 
 - **Fixed in 0.5.10: the old launcher stayed open after an update (#96, 2026-10-27).** AppKit
   refuses to quit while a sheet is attached: `NSApp.terminate` returns without asking the
