@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <time.h>
 #include "bbport_overlay.h"
 #include "bbport_settings.h"
@@ -59,6 +61,58 @@ void Publish(BbGpuShared* s, float vx, float vy) {
 BbGpuPointerSample pointer{};
 bool released_for_pointer = false; // the camera's mouse was let go for a menu: taken back after
 
+// The wheel in a menu selects: one notch is one item, never more, however fast it turns. macOS
+// accelerates a wheel mouse's notches (a quick flick arrives as a delta of 3, 5, 10: SDL rounds
+// them up to whole numbers, SDL_cocoamouse.m); that is for scrolling pages, and here it skipped
+// over items, so the size of a whole-number delta is ignored. A trackpad or Magic Mouse sends its
+// pixels / 10 in fractions: one item per MenuPreciseStep of them (60 points of travel), at most
+// one an event and MenuPreciseGapNs apart, nothing banked past an item, so its own acceleration
+// cannot run through a list either. A fraction seen in the last second marks the device precise.
+constexpr float MenuPreciseStep = 6.0f;
+constexpr u64 MenuPreciseGapNs = 120'000'000;
+constexpr u64 PreciseStickyNs = 1'000'000'000;
+float menu_wheel = 0.0f; // precise travel since the last item
+u64 precise_until_ns = 0, precise_item_ns = 0;
+
+void MenuWheel(BbGpuShared* s, float delta) {
+    const u64 now = MonotonicNs();
+    if (delta == 0.0f) {
+        return;
+    }
+    if (delta != std::trunc(delta)) {
+        precise_until_ns = now + PreciseStickyNs;
+    }
+    const bool precise = now < precise_until_ns;
+    int item = 0;
+    if (!precise) {
+        item = delta > 0 ? 1 : -1;
+    } else {
+        if (delta * menu_wheel < 0) {
+            menu_wheel = 0; // turning back starts afresh
+        }
+        menu_wheel += delta;
+        if (std::abs(menu_wheel) >= MenuPreciseStep) {
+            if (now - precise_item_ns >= MenuPreciseGapNs) {
+                item = menu_wheel > 0 ? 1 : -1;
+                precise_item_ns = now;
+            }
+            menu_wheel = 0;
+        }
+    }
+    static const bool log = [] {
+        const char* e = std::getenv("BB_MENU_POINTER_LOG");
+        return e && e[0] == '1';
+    }();
+    if (log) {
+        std::printf("Menu wheel: delta %.3f (%s) -> %d\n", delta, precise ? "precise" : "notch", item);
+    }
+    if (!item) {
+        return;
+    }
+    ++(item > 0 ? pointer.up_serial : pointer.down_serial);
+    bbgpu_pointer_publish(&s->pointer, &pointer);
+}
+
 bool PointerWanted(const BbGpuShared* s) {
     return __atomic_load_n(&s->menu_pointer, __ATOMIC_ACQUIRE) != 0 && !BbOverlay::CapturesInput();
 }
@@ -89,6 +143,7 @@ void SetCaptured(SDL_Window* window, BbGpuShared* s, bool on) {
     captured = on;
     buttons = 0;
     wheel = 0.0f;
+    menu_wheel = 0.0f;
     total_x = total_y = 0.0;
     ++input.epoch;
     input.captured = on;
@@ -140,14 +195,7 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
             return true;
         case SDL_EVENT_MOUSE_WHEEL: {
             const float delta = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
-            if (!std::isfinite(delta)) return true;
-            if (delta * wheel < 0) wheel = 0;
-            wheel += delta;
-            if (std::abs(wheel) >= 1.0f) {
-                ++(wheel > 0 ? pointer.up_serial : pointer.down_serial);
-                bbgpu_pointer_publish(&s->pointer, &pointer);
-                wheel = std::fmod(wheel, 1.0f);
-            }
+            if (std::isfinite(delta)) MenuWheel(s, delta);
             return true;
         }
         default:

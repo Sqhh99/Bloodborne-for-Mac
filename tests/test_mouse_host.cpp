@@ -98,11 +98,30 @@ int main() {
     assert(BbMouse::HandleEvent(nullptr,button) && pointer().left_held==0 && pointer().click_serial==1);
     button.type=SDL_EVENT_MOUSE_BUTTON_DOWN; button.button.button=SDL_BUTTON_RIGHT;
     assert(BbMouse::HandleEvent(nullptr,button) && pointer().back_serial==1 && pointer().click_serial==1);
-    BbMouse::wheel=0;
+    // One notch is one item: macOS's accelerated deltas (a quick flick's 3 or 40) are not more.
+    BbMouse::menu_wheel=0; BbMouse::precise_until_ns=0; BbMouse::precise_item_ns=0;
     scroll.wheel.direction=SDL_MOUSEWHEEL_NORMAL; scroll.wheel.y=-3;
     assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().down_serial==1 && pointer().up_serial==0);
+    scroll.wheel.y=-40;
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().down_serial==2);
     scroll.wheel.y=1;
     assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().up_serial==1);
+    // A trackpad (fractions): one item per 6 units (60 points), one an event, 120 ms apart,
+    // nothing banked past an item.
+    scroll.wheel.y=1.5f;
+    for (int i=0;i<3;++i) assert(BbMouse::HandleEvent(nullptr,scroll));
+    assert(pointer().up_serial==1); // 4.5 units: not yet an item
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().up_serial==2);
+    for (int i=0;i<4;++i) assert(BbMouse::HandleEvent(nullptr,scroll));
+    assert(pointer().up_serial==2); // another 6 units at once: too soon after the last item
+    scroll.wheel.y=30.5f;
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().up_serial==2);
+    BbMouse::precise_item_ns=0; // 120 ms later
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().up_serial==3); // a big one: one item
+    scroll.wheel.y=-1.5f; // turning back drops the travel left over
+    for (int i=0;i<3;++i) assert(BbMouse::HandleEvent(nullptr,scroll));
+    BbMouse::precise_item_ns=0;
+    assert(BbMouse::HandleEvent(nullptr,scroll) && pointer().down_serial==3);
     const auto wheel_before=Read().wheel_serial; // the game's wheel bindings saw none of it
     assert(wheel_before==Read().wheel_serial && !BbMouse::captured);
     // The menu closed: a left click takes the mouse for the camera again.

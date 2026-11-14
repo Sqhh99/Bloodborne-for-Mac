@@ -144,9 +144,22 @@ port's two processes:
   shared block version 14). No click captures the mouse or attacks then. When the menu closes
   the mouse is taken back for the camera if it was taken before, or if a menu was clicked with
   Mouse camera on (so the title menu leads straight into mouse look).
+- **The wheel in menus (2026-11-14):** the wheel selects, so one notch is one item, never more,
+  with no acceleration. macOS sends a quick flick of a wheel mouse as a bigger delta (3, 5, 10);
+  the host ignores the size of a whole-number delta. A trackpad or Magic Mouse (fractions) gives
+  one item per 6 units (60 points), at most one an event and 120 ms apart, nothing banked past an
+  item. `up_serial`/`down_serial` count the items. The pad thread queues them (at most 2, dropped
+  150 ms after the last event, turning back or a click drops them: the cursor never runs on
+  after the wheel) and presses the d-pad once per item by the game's pad reads: 2 reads down,
+  1 up. Before, items between two 90 ms presses merged into one. Hovering waits for the whole
+  scroll and 300 ms after it, however the pointer moves meanwhile (a hand's nudge or a move
+  towards the item scrolled to took the cursor to whatever the list had just scrolled under the
+  pointer), then comes back on a 6-pixel move or a click. `BB_MENU_POINTER_LOG=1` logs each
+  wheel event in the host ("Menu wheel: delta ... -> item"). Checked at the title menu with
+  `BB_MENU_POINTER_FILE` ("x y down N" adds N steps; the cursor and each step are logged).
 - A menu, for the pointer: the title menu, or a list with several items that had the focus in
   the last 400 ms. Not a message with one button (see Menu context): the mouse stays the camera.
-- `BB_MENU_POINTER=0` off; `BB_MENU_POINTER_FILE=<file>` ("x y [click|right|up|down]" in stage
+- `BB_MENU_POINTER=0` off; `BB_MENU_POINTER_FILE=<file>` ("x y [click|right|up N|down N]" in stage
   pixels, applied when the file changes) drives it in tests; `BB_MENU_POINTER_LOG=1` logs the
   signals a menu is told by at each change.
 

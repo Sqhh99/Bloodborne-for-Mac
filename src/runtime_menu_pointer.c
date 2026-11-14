@@ -33,7 +33,7 @@
  *    blocked), 0x5562878 another input block (+0x2e4), 0x5128948 the region (5: Japan, circle
  *    confirms), 0x557fc60 the menu sound request (+8 its label: 0x49344e4 the cursor's move).
  *
- * BB_MENU_POINTER=0: off. BB_MENU_POINTER_FILE=<file> (tests): "x y [click|right|up|down]" in
+ * BB_MENU_POINTER=0: off. BB_MENU_POINTER_FILE=<file> (tests): "x y [click|right|up N|down N]" in
  * stage pixels, applied when the file changes, as the mouse would. */
 #define _GNU_SOURCE
 #include "runtime.h"
@@ -400,6 +400,73 @@ static int pointer_moved(const uint8_t *list, float x, float y) {
     return 0;
 }
 
+/* ---- The wheel ----
+ * The wheel moves the game's cursor one item per step (the host counts a wheel's notches and a
+ * trackpad's travel in steps: gpu/shim/bbport_mouse.cpp). The pad thread queues them and
+ * presses the d-pad once per step, by the game's own pad reads (one a frame): WHEEL_PRESS_READS
+ * down, WHEEL_GAP_READS up, so a fast turn is never merged into one press and it runs as fast as
+ * the game takes them (20 a second at 60 FPS, faster than a hand turns notches). At most
+ * WHEEL_QUEUE steps wait and steps WHEEL_STALE_MS old are dropped: the cursor stops with the
+ * wheel, never runs on after it. Turning back drops the steps queued the other
+ * way, and a click drops them all (it acts on the item it is on). */
+enum { WHEEL_PRESS_READS=2, WHEEL_GAP_READS=1, WHEEL_QUEUE=2, WHEEL_STALE_MS=150, WHEEL_SETTLE_MS=300 };
+void runtime_menu_wheel_add(RuntimeMenuWheel *w, int steps, int64_t now) {
+    if (!steps) return;
+    if (steps>WHEEL_QUEUE) steps=WHEEL_QUEUE;
+    if (steps<-WHEEL_QUEUE) steps=-WHEEL_QUEUE;
+    if ((int64_t)steps*w->pending<0) w->pending=0;
+    w->pending+=steps;
+    if (w->pending>WHEEL_QUEUE) w->pending=WHEEL_QUEUE;
+    if (w->pending<-WHEEL_QUEUE) w->pending=-WHEEL_QUEUE;
+    w->event_ms=now; w->active_ms=now;
+}
+void runtime_menu_wheel_clear(RuntimeMenuWheel *w) { w->pending=0; w->reads=0; }
+/* The buttons for this pad read (BTN_DOWN, BTN_UP or 0). */
+uint32_t runtime_menu_wheel_next(RuntimeMenuWheel *w, int64_t now) {
+    if (w->reads) {
+        /* A step under way: held, then let go. */
+        const int read=w->reads++;
+        if (read>=WHEEL_PRESS_READS+WHEEL_GAP_READS-1) w->reads=0;
+        w->active_ms=now;
+        return read<WHEEL_PRESS_READS ? w->direction : 0;
+    }
+    if (w->pending && now-w->event_ms>WHEEL_STALE_MS) w->pending=0;
+    if (!w->pending) return 0;
+    w->direction=w->pending>0 ? BTN_DOWN : BTN_UP;
+    w->pending+=w->pending>0 ? -1 : 1;
+    w->reads=1; w->active_ms=now;
+    return w->direction;
+}
+/* Scrolling: a step queued or under way, or one in the last WHEEL_SETTLE_MS. */
+int runtime_menu_wheel_scrolling(const RuntimeMenuWheel *w, int64_t now) {
+    return w->pending || w->reads || (w->active_ms && now-w->active_ms<WHEEL_SETTLE_MS);
+}
+
+/* Hovering waits while the wheel scrolls, however the pointer moves meanwhile: a hand nudges
+ * the mouse as it turns the wheel, players move it on purpose to the item they are scrolling
+ * towards, and either took the cursor to whatever item the list had just scrolled under the
+ * pointer (scrolling a shop's list or the options kept selecting the items passing by). Once the
+ * scroll has settled, hovering comes back when the pointer moves HOVER_SLACK stage pixels from
+ * where it was then, or at a click. 1: hovering waits. The game's thread only. */
+#define HOVER_SLACK 6.0f
+int runtime_menu_pointer_wheel_holds(int scrolling, float x, float y, int clicked) {
+    static int holding;
+    static float anchor_x,anchor_y;
+    if (clicked) { holding=0; return 0; }
+    if (scrolling) { holding=1; anchor_x=x; anchor_y=y; return 1; }
+    const float dx=x-anchor_x,dy=y-anchor_y;
+    if (holding && !(dx*dx+dy*dy<=HOVER_SLACK*HOVER_SLACK)) holding=0;
+    return holding;
+}
+static _Atomic int64_t wheel_active_ms; /* pad thread -> game thread: the wheel scrolled then */
+static _Atomic int wheel_pending;       /* steps queued or under way */
+static _Atomic int wheel_cancel;        /* game thread -> pad thread: a click, drop the queue */
+static int wheel_scrolling_now(void) {
+    const int64_t active=atomic_load_explicit(&wheel_active_ms,memory_order_relaxed);
+    return atomic_load_explicit(&wheel_pending,memory_order_relaxed) ||
+        (active && now_ms()-active<WHEEL_SETTLE_MS);
+}
+
 /* The game's list update (0x1acff30) is about to run for `component` (the game's thread). */
 void runtime_menu_pointer_list_update(uint64_t component_address, uint64_t input_address) {
     if (!atomic_load_explicit(&hooked,memory_order_acquire)) return;
@@ -416,22 +483,39 @@ void runtime_menu_pointer_list_update(uint64_t component_address, uint64_t input
     const uint64_t now=host_monotonic_ns();
     const int clicked=p.click_serial!=atomic_load_explicit(&click_used,memory_order_relaxed) &&
         now>=p.click_ns && now-p.click_ns<=CLICK_LIFE_NS;
+    const int wheel_holds=runtime_menu_pointer_wheel_holds(wheel_scrolling_now(),x,y,clicked);
     List list={component,0,0};
+    static int log_cursor=-1;
+    if (log_cursor<0) log_cursor=getenv("BB_MENU_POINTER_FILE")!=NULL || getenv("BB_MENU_POINTER_LOG")!=NULL;
+    if (log_cursor) {
+        static const uint8_t *last_list;
+        static int last_cursor=-2;
+        const int cursor=list_cursor(&list);
+        if (component!=last_list || cursor!=last_cursor)
+            printf("Menu pointer: list %p cursor %d of %d at %lld ms\n",(void *)component,cursor,
+                   field_i32(component,F_COUNT),(long long)now_ms());
+        last_list=component; last_cursor=cursor;
+    }
     if (list_is_spinner(&list)) {
         /* One value shown: a click on its left half goes left, on the right half right. */
         Rect bounds={0};
         const Addr root=list_root(&list);
         if (clicked && root && shown(root) && contains(root,x,y,&bounds,0.0f)) {
+            atomic_store_explicit(&wheel_cancel,1,memory_order_relaxed);
             atomic_store_explicit(&click_used,p.click_serial,memory_order_relaxed);
             atomic_fetch_or_explicit(&presses,x<rect_center_x(&bounds) ? BTN_LEFT : BTN_RIGHT,memory_order_relaxed);
         }
         return;
     }
-    if ((!moved && !clicked) || atomic_load_explicit(&pad_steering,memory_order_relaxed)) return;
+    if ((!moved && !clicked) || wheel_holds ||
+        atomic_load_explicit(&pad_steering,memory_order_relaxed)) return;
     uint64_t slot=0;
     const int index=list_item_at(&list,x,y,&slot);
     if (index<0) return;
-    if (clicked) atomic_store_explicit(&click_used,p.click_serial,memory_order_relaxed);
+    if (clicked) {
+        atomic_store_explicit(&wheel_cancel,1,memory_order_relaxed);
+        atomic_store_explicit(&click_used,p.click_serial,memory_order_relaxed);
+    }
     static int trace=-1;
     if (trace<0) trace=getenv("BB_MENU_POINTER_FILE")!=NULL || getenv("BB_MENU_POINTER_LOG")!=NULL;
     if (trace) printf("Menu pointer: list %p item %d (cursor %d)%s\n",(void *)component,index,list_cursor(&list),
@@ -460,13 +544,15 @@ static void read_test_file(void) {
     memcpy(last,text,sizeof last);
     float x=0,y=0;
     char action[16]={0};
-    if (sscanf(text,"%f %f %15s",&x,&y,action)<2) return;
+    int count=1; /* "x y down 5": five wheel steps in one event, as a fast turn */
+    if (sscanf(text,"%f %f %15s %d",&x,&y,action,&count)<2) return;
+    if (count<1 || count>100) count=1;
     atomic_store_explicit(&test_pointer,0,memory_order_release);
     test_sample.x=x; test_sample.y=y; test_sample.inside=1;
     if (!strcmp(action,"click")) { ++test_sample.click_serial; test_sample.click_ns=host_monotonic_ns(); }
     else if (!strcmp(action,"right")) ++test_sample.back_serial;
-    else if (!strcmp(action,"up")) ++test_sample.up_serial;
-    else if (!strcmp(action,"down")) ++test_sample.down_serial;
+    else if (!strcmp(action,"up")) test_sample.up_serial+=(uint32_t)count;
+    else if (!strcmp(action,"down")) test_sample.down_serial+=(uint32_t)count;
     atomic_store_explicit(&test_pointer,1,memory_order_release);
     printf("Menu pointer: test %.0f %.0f %s (in a menu: %d)\n",x,y,action,in_menu());
 }
@@ -483,8 +569,9 @@ int runtime_menu_pointer_wanted(void) {
     return atomic_load_explicit(&hooked,memory_order_acquire) && in_menu();
 }
 
-/* The pad state the game reads (pad thread): the pointer's presses, each held long enough for
- * the game to see it, with a gap after. Tells the host whether a menu wants the pointer. */
+/* The pad state the game reads (pad thread, once a frame): the pointer's presses, each held
+ * long enough for the game to see it, with a gap after, and the wheel's steps. Tells the host
+ * whether a menu wants the pointer. */
 void runtime_menu_pointer_pad(uint32_t *buttons, uint8_t left_x, uint8_t left_y) {
     if (!atomic_load_explicit(&hooked,memory_order_acquire)) return;
     read_test_file();
@@ -518,33 +605,46 @@ void runtime_menu_pointer_pad(uint32_t *buttons, uint8_t left_x, uint8_t left_y)
     static uint32_t holding,back_seen,up_seen,down_seen;
     static int primed,left_held;
     static int64_t until_ms,repeat_ms;
+    static RuntimeMenuWheel wheel;
+    const int64_t now=now_ms();
+    if (atomic_exchange_explicit(&wheel_cancel,0,memory_order_relaxed)) runtime_menu_wheel_clear(&wheel);
     BbGpuPointerSample p;
     if (pointer_sample(&p)) {
         if (primed && menu) {
             if (p.back_serial!=back_seen) atomic_fetch_or_explicit(&presses,back_button(),memory_order_relaxed);
-            if (p.up_serial!=up_seen) atomic_fetch_or_explicit(&presses,BTN_UP,memory_order_relaxed);
-            if (p.down_serial!=down_seen) atomic_fetch_or_explicit(&presses,BTN_DOWN,memory_order_relaxed);
+            /* The serials count steps (a fast turn adds several at once). */
+            const int down=(int)(int32_t)(p.down_serial-down_seen),up=(int)(int32_t)(p.up_serial-up_seen);
+            if (down>=0 && up>=0) runtime_menu_wheel_add(&wheel,down-up,now);
         }
         back_seen=p.back_serial; up_seen=p.up_serial; down_seen=p.down_serial;
         left_held=p.left_held!=0; primed=1;
         if (!left_held) atomic_store_explicit(&repeat_press,0,memory_order_relaxed);
     }
-    const int64_t now=now_ms();
     if (!menu) {
         atomic_store_explicit(&presses,0,memory_order_relaxed);
         atomic_store_explicit(&repeat_press,0,memory_order_relaxed);
         holding=0;
+        runtime_menu_wheel_clear(&wheel);
+        atomic_store_explicit(&wheel_pending,0,memory_order_relaxed);
         return;
     }
     enum { PRESS_MS=50, GAP_MS=40, REPEAT_DELAY_MS=400, REPEAT_MS=120 };
     if (holding && now>=until_ms) { holding=0; until_ms=now+GAP_MS; }
-    if (!holding && now>=until_ms) {
+    if (!holding && now>=until_ms && !wheel.reads) {
         const uint32_t next=atomic_exchange_explicit(&presses,0,memory_order_relaxed);
         const uint32_t arrow=atomic_load_explicit(&repeat_press,memory_order_relaxed);
         if (next) { holding=next; until_ms=now+PRESS_MS; repeat_ms=now+REPEAT_DELAY_MS; }
         else if (arrow && left_held && now>=repeat_ms) { holding=arrow; until_ms=now+PRESS_MS; repeat_ms=now+REPEAT_MS; }
     }
-    *buttons|=holding;
+    /* A wheel step waits for a click's or Back's press (never pressed together with one). */
+    const uint32_t step=holding ? 0 : runtime_menu_wheel_next(&wheel,now);
+    atomic_store_explicit(&wheel_pending,wheel.pending || wheel.reads,memory_order_relaxed);
+    atomic_store_explicit(&wheel_active_ms,wheel.active_ms,memory_order_relaxed);
+    static int log_wheel=-1;
+    if (log_wheel<0) log_wheel=getenv("BB_MENU_POINTER_FILE")!=NULL || getenv("BB_MENU_POINTER_LOG")!=NULL;
+    if (log_wheel && step && wheel.reads==1)
+        printf("Menu pointer: wheel step %s at %lld ms (%d queued)\n",step==BTN_DOWN ? "down" : "up",(long long)now,wheel.pending);
+    *buttons|=holding|step;
 }
 
 void runtime_menu_pointer_set_shared(void *(*shared)(void)) { pointer_shared=shared; }
