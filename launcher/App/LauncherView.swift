@@ -240,7 +240,7 @@ struct LauncherView: View {
                     ForEach(GameSettings.debugEffects) { effect in
                         Toggle(L(dynamic: effect.label), isOn: effectBinding(effect.key))
                     }
-                    Text(L("Free camera: hold Cross and press L3 (keyboard: F + Left Ctrl). Debug menu: left touchpad / G; needs DbgFont14h.ccm and DbgFont14h.tpf in dvdroot_ps4/font from Nexus mod #253."))
+                    Text(L("Free camera: hold Cross and press L3 (keyboard: E + X). Debug menu: left touchpad / G; needs DbgFont14h.ccm and DbgFont14h.tpf in dvdroot_ps4/font from Nexus mod #253."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

@@ -19,26 +19,27 @@ static const struct { const char *name; uint16_t input; } mouse_names[]={
     {"Wheel Up",INPUT_WHEEL_UP}, {"Wheel Down",INPUT_WHEEL_DOWN},
 };
 
-/* Dark Souls III's PC layout, as bloodborne-mac's runtime has it (its src/runtime_pad.c
- * bind_defaults): the mouse fights (left R1, Shift+left R2, right L2), Space dodges, Left Shift
- * runs, the digits, the arrow keys and the wheel are the d-pad, IJKL turn the camera. Circle
- * itself has no key: the dodge and the run press it. */
+/* Dark Souls III's default PC controls, adapted to Bloodborne: Space is the real Circle
+ * button (tap to dodge, hold to run), E interacts, Q locks on / goes back in menus, F transforms.
+ * V uses a blood vial so R remains the quick item. Right click also fires: Bloodborne has no
+ * universal shield action. Optional separate dodge/run bindings remain available. */
 static const struct { const char *key, *defaults; } actions[BIND_COUNT]={
     [BIND_MOVE_FORWARD]={"bind_move_forward","W"}, [BIND_MOVE_BACK]={"bind_move_back","S"},
     [BIND_MOVE_LEFT]={"bind_move_left","A"}, [BIND_MOVE_RIGHT]={"bind_move_right","D"},
     [BIND_WALK]={"bind_walk","Left Alt"},
-    [BIND_DODGE]={"bind_dodge","Space"}, [BIND_SPRINT]={"bind_sprint","Left Shift"},
+    [BIND_DODGE]={"bind_dodge",""}, [BIND_SPRINT]={"bind_sprint",""},
     [BIND_CAMERA_UP]={"bind_camera_up","I"}, [BIND_CAMERA_DOWN]={"bind_camera_down","K"},
     [BIND_CAMERA_LEFT]={"bind_camera_left","J"}, [BIND_CAMERA_RIGHT]={"bind_camera_right","L"},
-    [BIND_CROSS]={"bind_cross","F,Return,Keypad Enter"}, [BIND_CIRCLE]={"bind_circle",""},
-    [BIND_SQUARE]={"bind_square","Tab,R"}, [BIND_TRIANGLE]={"bind_triangle","Q"},
+    [BIND_CROSS]={"bind_cross","E,Return,Keypad Enter"}, [BIND_CIRCLE]={"bind_circle","Space"},
+    [BIND_SQUARE]={"bind_square","R,Tab"}, [BIND_TRIANGLE]={"bind_triangle","V"},
     [BIND_R1]={"bind_r1","Mouse Left"}, [BIND_R2]={"bind_r2","Left Shift+Mouse Left,Mouse Back"},
-    [BIND_L1]={"bind_l1","E,Mouse Forward"}, [BIND_L2]={"bind_l2","Mouse Right"},
-    [BIND_R3]={"bind_r3","C,Mouse Middle"}, [BIND_L3]={"bind_l3","Left Ctrl"},
-    [BIND_DPAD_UP]={"bind_dpad_up","3,Up,Wheel Up"}, [BIND_DPAD_DOWN]={"bind_dpad_down","4,Down,Wheel Down"},
-    [BIND_DPAD_LEFT]={"bind_dpad_left","1,Left"}, [BIND_DPAD_RIGHT]={"bind_dpad_right","2,Right"},
+    [BIND_L1]={"bind_l1","F,Mouse Forward"}, [BIND_L2]={"bind_l2","Left Ctrl,Left Shift+Mouse Right,Mouse Right"},
+    [BIND_R3]={"bind_r3","Q,Mouse Middle"}, [BIND_L3]={"bind_l3","X"},
+    [BIND_DPAD_UP]={"bind_dpad_up","3,Up"}, [BIND_DPAD_DOWN]={"bind_dpad_down","4,Down,Wheel Down"},
+    [BIND_DPAD_LEFT]={"bind_dpad_left","1,Left,Left Shift+Wheel Down"}, [BIND_DPAD_RIGHT]={"bind_dpad_right","2,Right,Wheel Up"},
     [BIND_OPTIONS]={"bind_options","Escape"},
     [BIND_TOUCH_LEFT]={"bind_touch_left","G"}, [BIND_TOUCH_RIGHT]={"bind_touch_right","Backspace"},
+    [BIND_MENU_BACK]={"bind_menu_back","Q"},
 };
 
 static const char *const pad_names[PAD_BUTTON_COUNT]={
@@ -143,6 +144,7 @@ void runtime_bindings_load(const char *ini_path) {
     for (int i=0;i<PAD_COUNT;++i) parse_pad_list(i,pad_inputs[i].defaults,0);
     camera_keys_dpad=false;
     loaded=1;
+    bool circle_configured=false;
     FILE *f=ini_path ? fopen(ini_path,"r") : NULL;
     if (f) {
         char line[512];
@@ -160,11 +162,22 @@ void runtime_bindings_load(const char *ini_path) {
             }
             for (int a=0;a<BIND_COUNT;++a) {
                 if (strcmp(key,actions[a].key)) continue;
+                if (a==BIND_CIRCLE) circle_configured=true;
                 parse_list(a,value,1);
                 printf("Runtime: %s=%s\n",key,value);
             }
         }
         fclose(f);
+    }
+    /* An older explicit Space -> short dodge must not also pick up the new default
+     * Space -> held Circle. Explicit Circle bindings still belong to the user. */
+    if (!circle_configured) {
+        for (int s=0;s<BIND_SLOTS;++s) {
+            for (int a=BIND_DODGE;a<=BIND_SPRINT;++a) for (int t=0;t<BIND_SLOTS;++t) {
+                if (bound[BIND_CIRCLE][s] && bound[BIND_CIRCLE][s]==bound[a][t] &&
+                    bound_mod[BIND_CIRCLE][s]==bound_mod[a][t]) bound[BIND_CIRCLE][s]=0;
+            }
+        }
     }
     use_wheel=use_chords=false;
     for (int a=0;a<BIND_COUNT;++a)
@@ -207,6 +220,20 @@ uint64_t runtime_bindings_held(const bool *keys, uint32_t mouse) {
             held|=UINT64_C(1)<<a;
             break;
         }
+    }
+    return held;
+}
+
+/* Capture only the actions driven by this wheel pulse. Modifiers are sampled once, so
+ * releasing Shift during the pulse cannot turn a weapon change into an item change. */
+uint64_t runtime_bindings_wheel_actions(const bool *keys,uint32_t wheel) {
+    load_once();
+    uint64_t held=0;
+    for (int a=0;a<BIND_COUNT;++a) for (int s=0;s<BIND_SLOTS;++s) {
+        const uint16_t in=bound[a][s],mod=bound_mod[a][s];
+        if (in!=INPUT_WHEEL_UP && in!=INPUT_WHEEL_DOWN && mod!=INPUT_WHEEL_UP && mod!=INPUT_WHEEL_DOWN) continue;
+        if (!input_down(in,keys,wheel) || (mod ? !input_down(mod,keys,wheel) : use_chords && chord_held(in,keys,wheel))) continue;
+        held|=UINT64_C(1)<<a;
     }
     return held;
 }

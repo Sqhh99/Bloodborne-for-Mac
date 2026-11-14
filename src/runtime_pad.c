@@ -3,11 +3,10 @@
  * by the window thread (gpu/shim/window.cpp); here state is only sampled.
  *
  * Keyboard and mouse buttons (beside a gamepad): bbport.ini bind_ keys, runtime_bindings.c. The
- * defaults are Dark Souls III's PC layout, as in bloodborne-mac: WASD the left stick, IJKL the
- * right stick (the camera), Space the dodge (a short Circle press: never a run), Left Shift the
- * run (Circle held), Shift + Space the jump, F and Enter Cross, Q Triangle, Tab and R Square, E L1,
- * C R3, Left Ctrl L3, Left Alt walk, Escape Options, G / Backspace touchpad left / right, the
- * d-pad on 1 (left), 2 (right), 3 (up), 4 (down) and the arrow keys.
+ * defaults follow Dark Souls III: WASD moves (navigates only in menus), Space taps / holds
+ * Circle for dodge / run, E interacts, Q locks on / backs out of menus, F transforms the weapon.
+ * Bloodborne's blood vial uses V, leaving R for quick items; Ctrl / right click fires the gun.
+ * Optional separate dodge / sprint bindings and custom controller mappings are still supported.
  * Controller buttons: bbport.ini bind_pad_ keys (remap_buttons).
  * Mouse (split mode, after a click in the window): the camera (right stick); by default left
  * button R1, Shift + left R2, right L2, middle R3, side buttons R2 (back) and L1 (forward), the
@@ -16,6 +15,7 @@
 #include "runtime.h"
 #include "gpu/bbgpu.h"
 #include "runtime_bindings.h"
+#include "host/bbgpu_mouse_input.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +26,11 @@
 #include <sys/stat.h>
 #ifdef __APPLE__
 #include "host/bbgpu_shared.h"
+#include <mach/mach.h>
+#include <mach/mach_vm.h>
+#elif defined(__linux__)
+#include <sys/uio.h>
+#include <unistd.h>
 #endif
 
 #define ERR_INVALID_ARG ((int32_t)0x80920001)
@@ -104,12 +109,48 @@ static SDL_Gamepad *current_gamepad(void) {
     return gamepad;
 }
 static int mouse_look_active(void);
-static uint32_t mouse_inputs(void);
+static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions);
 /* A stick axis from two opposite keys: neutral 128, `reach` towards the held side (both: 127). */
 static uint8_t key_axis(int negative, int positive, int reach) {
     const int v=128-(negative ? reach : 0)+(positive ? (reach>127 ? 127 : reach) : 0);
     return (uint8_t)(v<0 ? 0 : v>255 ? 255 : v);
 }
+
+/* Bloodborne 1.09 menu-flow offsets, documented by bloodborne-mac's
+ * gpu/games/bloodborne_menu_pointer.cpp. Read-only: no guest hooks are installed. The list
+ * update prologue guards the layout; a missing / unsupported image leaves gameplay alone.
+ * Kernel-checked reads also tolerate a menu object disappearing between pad samples. */
+#define MENU_FLOW_OFFSET 0x5580e38u
+#define MENU_LIST_UPDATE_OFFSET 0x1acff30u
+static uintptr_t menu_flow_address;
+void runtime_pad_set_image(unsigned char *image, uint64_t size) {
+    static const unsigned char signature[]={0x55,0x48,0x89,0xe5,0x41,0x57};
+    menu_flow_address=0;
+    if (!image || size<MENU_FLOW_OFFSET+sizeof(uintptr_t) ||
+        memcmp(image+MENU_LIST_UPDATE_OFFSET,signature,sizeof signature)) return;
+    menu_flow_address=(uintptr_t)image+MENU_FLOW_OFFSET;
+}
+static int pad_read_memory(uintptr_t address,void *out,size_t size) {
+    if (address<0x10000 || address>UINTPTR_MAX-size) return 0;
+#ifdef __APPLE__
+    mach_vm_size_t got=0;
+    return mach_vm_read_overwrite(mach_task_self(),address,size,(mach_vm_address_t)out,&got)==KERN_SUCCESS && got==size;
+#elif defined(__linux__)
+    struct iovec local={out,size},remote={(void *)address,size};
+    return process_vm_readv(getpid(),&local,1,&remote,1,0)==(ssize_t)size;
+#else
+    (void)out; return 0;
+#endif
+}
+static int game_menu_active(void) {
+    uintptr_t flow=0,menu=0;
+    unsigned char state[0x9a]; /* flow+0xa78 .. flow+0xb11 (title flag) */
+    if (!menu_flow_address || !pad_read_memory(menu_flow_address,&flow,sizeof flow) ||
+        !flow || flow>UINTPTR_MAX-0xb12 || !pad_read_memory(flow+0xa78,state,sizeof state)) return 0;
+    memcpy(&menu,state+0x10,sizeof menu);
+    return !state[0x99] || menu!=0;
+}
+int runtime_pad_menu_active(void) { return game_menu_active(); }
 /* The controller's buttons (bit per PAD_* button) and triggers as the game sees them, after
  * bbport.ini bind_pad_ keys (runtime_bindings.c). A trigger counts as pressed past 30 and keeps
  * its analog value when it is bound to L2/R2; any other button bound there presses it fully. */
@@ -207,27 +248,49 @@ static void sample_devices(PadData *d) {
      * shortcuts (Cmd+Q, Cmd+, ...), not game input: Cmd+Q drank a Blood Vial. What each key and
      * mouse button does comes from bbport.ini bind_ keys (runtime_bindings.c). */
     if (k && (k[SDL_SCANCODE_LGUI] || k[SDL_SCANCODE_RGUI])) k=NULL;
-    const uint32_t mouse=mouse_inputs();
-    if (!k && !mouse) { dodge_was_down=0; return; }
-    const uint64_t held=runtime_bindings_held(k,mouse);
+    uint64_t wheel_actions=0;
+    const uint32_t mouse=mouse_inputs(k,&wheel_actions);
+    if (!k && !mouse && !wheel_actions) { dodge_was_down=0; return; }
+    const uint64_t held=runtime_bindings_held(k,mouse)|wheel_actions;
+    const int menu=game_menu_active();
 #define HELD(a) ((held>>(a))&1)
+    /* A menu opened by Esc must not close again while that same Esc is held. Q consumed as
+     * Back must not turn into lock-on if the menu disappears before the key is released. */
+    static int options_latched,back_consumed;
+    if (!HELD(BIND_OPTIONS)) options_latched=0;
+    else if (!menu) options_latched=1;
+    if (!HELD(BIND_MENU_BACK)) back_consumed=0;
+    else if (menu) back_consumed=1;
     static const struct { int action; uint32_t ps; } buttons[]={
         {BIND_CROSS,BTN_CROSS}, {BIND_CIRCLE,BTN_CIRCLE}, {BIND_SQUARE,BTN_SQUARE}, {BIND_TRIANGLE,BTN_TRIANGLE},
         {BIND_R1,BTN_R1}, {BIND_R2,BTN_R2}, {BIND_L1,BTN_L1}, {BIND_L2,BTN_L2}, {BIND_R3,BTN_R3}, {BIND_L3,BTN_L3},
         {BIND_DPAD_UP,BTN_UP}, {BIND_DPAD_DOWN,BTN_DOWN}, {BIND_DPAD_LEFT,BTN_LEFT}, {BIND_DPAD_RIGHT,BTN_RIGHT},
         {BIND_OPTIONS,BTN_OPTIONS},
     };
-    for (size_t i=0;i<sizeof(buttons)/sizeof(*buttons);++i) if (HELD(buttons[i].action)) d->buttons|=buttons[i].ps;
-    if (keyboard_circle(HELD(BIND_DODGE),HELD(BIND_SPRINT),d->timestamp)) d->buttons|=BTN_CIRCLE;
+    for (size_t i=0;i<sizeof(buttons)/sizeof(*buttons);++i) {
+        const int action=buttons[i].action;
+        if (!HELD(action) || (action==BIND_R3 && back_consumed)) continue;
+        d->buttons|=action==BIND_OPTIONS && menu && !options_latched ? BTN_CIRCLE : buttons[i].ps;
+    }
+    if (menu) {
+        dodge_pulse_until=jump_start_us=0; dodge_was_down=HELD(BIND_DODGE);
+        if (HELD(BIND_MENU_BACK) || HELD(BIND_DODGE) || HELD(BIND_SPRINT)) d->buttons|=BTN_CIRCLE;
+        /* WASD is an alias for the menu's arrows only here: never switch weapons while moving.
+         * Opposite keys cancel, just as a physical stick does. */
+        if (HELD(BIND_MOVE_FORWARD) && !HELD(BIND_MOVE_BACK)) d->buttons|=BTN_UP;
+        if (HELD(BIND_MOVE_BACK) && !HELD(BIND_MOVE_FORWARD)) d->buttons|=BTN_DOWN;
+        if (HELD(BIND_MOVE_LEFT) && !HELD(BIND_MOVE_RIGHT)) d->buttons|=BTN_LEFT;
+        if (HELD(BIND_MOVE_RIGHT) && !HELD(BIND_MOVE_LEFT)) d->buttons|=BTN_RIGHT;
+    } else if (keyboard_circle(HELD(BIND_DODGE),HELD(BIND_SPRINT),d->timestamp)) d->buttons|=BTN_CIRCLE;
     if (HELD(BIND_TOUCH_LEFT)) touch_click(d,0);
     if (HELD(BIND_TOUCH_RIGHT)) touch_click(d,1);
     if (HELD(BIND_L2)) d->l2=255;
     if (HELD(BIND_R2)) d->r2=255;
     /* Walk: the movement keys push the stick half way (full deflection always runs). */
     const int reach=HELD(BIND_WALK) ? 64 : 128;
-    if (HELD(BIND_MOVE_LEFT) || HELD(BIND_MOVE_RIGHT))
+    if (!menu && (HELD(BIND_MOVE_LEFT) || HELD(BIND_MOVE_RIGHT)))
         d->left_x=key_axis(HELD(BIND_MOVE_LEFT),HELD(BIND_MOVE_RIGHT),reach);
-    if (HELD(BIND_MOVE_FORWARD) || HELD(BIND_MOVE_BACK))
+    if (!menu && (HELD(BIND_MOVE_FORWARD) || HELD(BIND_MOVE_BACK)))
         d->left_y=key_axis(HELD(BIND_MOVE_FORWARD),HELD(BIND_MOVE_BACK),reach);
     if (mouse_look_active() && runtime_bindings_camera_keys_dpad()) {
         /* The mouse has the camera, so the camera keys are the d-pad: menus scroll with them and
@@ -250,12 +313,22 @@ static void sample_devices(PadData *d) {
  * MOUSE_FULL_SPEED points/s (the sensitivity is applied by the host), and never below
  * MOUSE_MIN_DEFLECTION so slow moves still clear the game's stick dead zone. The stick is only
  * taken over while the mouse moves; gamepad and keyboard keep it otherwise. */
-#define MOUSE_FULL_SPEED 650.0
+#define MOUSE_FULL_SPEED 450.0
 #define MOUSE_MIN_DEFLECTION 24.0
+/* Kept outside the platform-specific shared-memory reader so the response can be verified
+ * with real speeds, diagonals, stopped input and the full-stick ceiling. */
+static inline void mouse_stick(double vx,double vy,uint8_t *x,uint8_t *y) {
+    const double speed=hypot(vx,vy);
+    if (!isfinite(speed) || speed<1.0) return;
+    const double fraction=fmin(speed/MOUSE_FULL_SPEED,1.0);
+    const double deflection=MOUSE_MIN_DEFLECTION+(127.0-MOUSE_MIN_DEFLECTION)*fraction;
+    *x=(uint8_t)lround(128.0+vx/speed*deflection);
+    *y=(uint8_t)lround(128.0+vy/speed*deflection);
+}
 /* The GPU process's shared control block: gpu_process.c registers its accessor when it starts.
  * Without one (the unit tests link the runtime without gpu_process.c) there is no mouse. */
 static void *(*pad_shared)(void);
-void runtime_pad_set_shared(void *(*shared)(void)) { pad_shared=shared; }
+void runtime_pad_set_shared(void *(*shared)(void)) { pad_shared=shared; runtime_mouse_set_shared(shared); }
 /* Mouse look is on when the Mouse camera setting is (bbport.ini mouse_look, read at start; the
  * launcher sets it) or while the host window holds the cursor (switched on in the in-game menu).
  * The arrow keys are then the d-pad, from the title screen on. */
@@ -268,39 +341,55 @@ static int mouse_look_active(void) {
     return 0;
 #endif
 }
-/* The mouse buttons held and the wheel step being pressed, while the host window holds the cursor
- * (the buttons only mean something to the game then); 0 otherwise. Each wheel step is a press
- * of WHEEL_PRESS_US and a release of as long, so quick steps still count one by one. */
-#define WHEEL_PRESS_US 50000u
-static uint32_t mouse_inputs(void) {
+/* Scroll is a live gesture, never a queued macro. Coalesce a burst into a bounded press;
+ * ignore extra same-direction steps until release, and discard them instead of replaying them.
+ * At rest no action can outlive the last pulse's 35 ms press. */
+#define WHEEL_PRESS_US 35000u
+#define WHEEL_RELEASE_US 35000u
+typedef struct {
+    uint32_t serial,epoch;
+    int primed,direction,started;
+    uint64_t press_until,release_until,actions;
+} WheelPulse;
+static void wheel_pulse(WheelPulse *pulse,const BbGpuMouseSample *input,uint64_t now,int enabled) {
+    pulse->started=0;
+    if (!enabled || !input->captured || !pulse->primed || pulse->epoch!=input->epoch) {
+        *pulse=(WheelPulse){.serial=input->wheel_serial,.epoch=input->epoch,.primed=1};
+        return;
+    }
+    if (pulse->direction && now>=pulse->press_until) {
+        pulse->direction=0; pulse->actions=0;
+        pulse->release_until=pulse->press_until+WHEEL_RELEASE_US;
+    }
+    const int fresh=pulse->serial!=input->wheel_serial;
+    pulse->serial=input->wheel_serial; /* consume every event, including coalesced ones */
+    const uint64_t event_us=input->wheel_ns/1000u;
+    if (!fresh || !input->wheel_direction || now<event_us || now-event_us>100000u) return;
+    if ((pulse->direction && pulse->direction!=input->wheel_direction) ||
+        (!pulse->direction && now>=pulse->release_until)) {
+        pulse->direction=input->wheel_direction; pulse->started=1;
+        pulse->press_until=now+WHEEL_PRESS_US;
+    }
+}
+static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions) {
+    *wheel_actions=0;
 #ifdef __APPLE__
     const BbGpuShared *s=pad_shared ? (const BbGpuShared *)pad_shared() : NULL;
-    static uint32_t seen[2]; static int pending[2], primed; static uint64_t phase_end[2]; static int pressing[2];
+    static WheelPulse pulse;
+    static BbGpuMouseSample input;
     if (!s) return 0;
-    const uint32_t counts[2]={__atomic_load_n(&s->mouse_wheel_up,__ATOMIC_RELAXED),
-                              __atomic_load_n(&s->mouse_wheel_down,__ATOMIC_RELAXED)};
-    if (!__atomic_load_n(&s->mouse_captured,__ATOMIC_ACQUIRE) || bbgpu_overlay_captures_input()) {
-        seen[0]=counts[0]; seen[1]=counts[1]; pending[0]=pending[1]=pressing[0]=pressing[1]=0; primed=1;
-        return 0;
-    }
-    uint32_t mouse=__atomic_load_n(&s->mouse_buttons,__ATOMIC_RELAXED) & 0xffu;
-    if (!primed) { seen[0]=counts[0]; seen[1]=counts[1]; primed=1; }
-    if (runtime_bindings_use_wheel()) {
-        const uint64_t now=now_us();
-        for (int w=0;w<2;++w) {
-            const uint32_t steps=counts[w]-seen[w];
-            seen[w]=counts[w];
-            pending[w]+=steps>8 ? 8 : (int)steps; /* a flick of the wheel is not 40 presses */
-            if (pending[w]>8) pending[w]=8;
-            if (now>=phase_end[w]) {
-                if (pressing[w]) { pressing[w]=0; phase_end[w]=now+WHEEL_PRESS_US; }
-                else if (pending[w]) { --pending[w]; pressing[w]=1; phase_end[w]=now+WHEEL_PRESS_US; }
-            }
-            if (pressing[w]) mouse|=w ? BIND_WHEEL_DOWN_MASK : BIND_WHEEL_UP_MASK;
-        }
-    }
+    BbGpuMouseSample next;
+    if (bbgpu_mouse_read(&s->mouse_input,&next)) input=next;
+    const int enabled=__atomic_load_n(&s->mouse_captured,__ATOMIC_ACQUIRE) && !bbgpu_overlay_captures_input();
+    wheel_pulse(&pulse,&input,now_us(),enabled && runtime_bindings_use_wheel());
+    if (pulse.started) pulse.actions=runtime_bindings_wheel_actions(keys,
+        pulse.direction>0 ? BIND_WHEEL_UP_MASK : BIND_WHEEL_DOWN_MASK);
+    if (!enabled) return 0;
+    if (pulse.direction) *wheel_actions=pulse.actions;
+    const uint32_t mouse=__atomic_load_n(&s->mouse_buttons,__ATOMIC_RELAXED) & 0xffu;
     return mouse;
 #else
+    (void)keys;
     return 0;
 #endif
 }
@@ -308,14 +397,10 @@ static void add_mouse(PadData *d) {
 #ifdef __APPLE__
     const BbGpuShared *s=pad_shared ? (const BbGpuShared *)pad_shared() : NULL;
     if (!s || !__atomic_load_n(&s->mouse_captured,__ATOMIC_ACQUIRE) || bbgpu_overlay_captures_input()) return;
+    if (game_menu_active() || runtime_mouse_direct_active()) return;
     const double vx=__atomic_load_n(&s->mouse_vx,__ATOMIC_RELAXED);
     const double vy=__atomic_load_n(&s->mouse_vy,__ATOMIC_RELAXED);
-    const double speed=sqrt(vx*vx+vy*vy);
-    if (speed<1.0) return;
-    const double fraction=speed>=MOUSE_FULL_SPEED ? 1.0 : speed/MOUSE_FULL_SPEED;
-    const double deflection=MOUSE_MIN_DEFLECTION+(127.0-MOUSE_MIN_DEFLECTION)*fraction;
-    d->right_x=(uint8_t)lround(128.0+vx/speed*deflection);
-    d->right_y=(uint8_t)lround(128.0+vy/speed*deflection);
+    mouse_stick(vx,vy,&d->right_x,&d->right_y);
 #else
     (void)d;
 #endif

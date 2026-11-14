@@ -55,6 +55,7 @@ int main() {
 
     // An empty file uses the port's precise defaults (all ten effects included).
     BbSettings::Load();
+    assert(BbSettings::Get().mouse_sensitivity == 2.0f && BbSettings::Get().mouse_vertical == 1.0f);
     assert(Get(BBMAC_UPSCALER) == BbSettings::UpscalerOff);
     assert(Get(BBMAC_PRESET) == BbSettings::NativeAA);
     assert(Get(BBMAC_OUTPUT) == BbSettings::OutputDefault);

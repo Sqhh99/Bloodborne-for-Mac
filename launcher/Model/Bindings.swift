@@ -27,8 +27,9 @@ struct Bindings: Equatable {
         BindAction(key: "bind_move_back", label: "Back", group: "Movement", defaults: ["S"]),
         BindAction(key: "bind_move_left", label: "Left", group: "Movement", defaults: ["A"]),
         BindAction(key: "bind_move_right", label: "Right", group: "Movement", defaults: ["D"]),
-        BindAction(key: "bind_dodge", label: "Dodge (tap Circle)", group: "Movement", defaults: ["Space"]),
-        BindAction(key: "bind_sprint", label: "Run (hold Circle)", group: "Movement", defaults: ["Left Shift"]),
+        BindAction(key: "bind_circle", label: "Dodge, run, back (Circle)", group: "Movement", defaults: ["Space"]),
+        BindAction(key: "bind_dodge", label: "Dodge (tap Circle)", group: "Movement", defaults: []),
+        BindAction(key: "bind_sprint", label: "Run (hold Circle)", group: "Movement", defaults: []),
         BindAction(key: "bind_walk", label: "Walk (hold)", group: "Movement", defaults: ["Left Alt"]),
         BindAction(key: "bind_camera_up", label: "Up", group: "Camera", defaults: ["I"]),
         BindAction(key: "bind_camera_down", label: "Down", group: "Camera", defaults: ["K"]),
@@ -36,18 +37,18 @@ struct Bindings: Equatable {
         BindAction(key: "bind_camera_right", label: "Right", group: "Camera", defaults: ["L"]),
         BindAction(key: "bind_r1", label: "Attack (R1)", group: "Combat", defaults: ["Mouse Left"]),
         BindAction(key: "bind_r2", label: "Charged attack (R2)", group: "Combat", defaults: ["Left Shift+Mouse Left", "Mouse Back"]),
-        BindAction(key: "bind_l1", label: "Transform weapon (L1)", group: "Combat", defaults: ["E", "Mouse Forward"]),
-        BindAction(key: "bind_l2", label: "Firearm (L2)", group: "Combat", defaults: ["Mouse Right"]),
-        BindAction(key: "bind_r3", label: "Lock on (R3)", group: "Combat", defaults: ["C", "Mouse Middle"]),
-        BindAction(key: "bind_cross", label: "Interact, confirm (Cross)", group: "Actions", defaults: ["F", "Return", "Keypad Enter"]),
-        BindAction(key: "bind_circle", label: "Back (Circle)", group: "Actions", defaults: []),
-        BindAction(key: "bind_square", label: "Quick item (Square)", group: "Actions", defaults: ["Tab", "R"]),
-        BindAction(key: "bind_triangle", label: "Blood Vial (Triangle)", group: "Actions", defaults: ["Q"]),
-        BindAction(key: "bind_l3", label: "L3", group: "Actions", defaults: ["Left Ctrl"]),
-        BindAction(key: "bind_dpad_up", label: "Up", group: "D-pad", defaults: ["3", "Up", "Wheel Up"]),
+        BindAction(key: "bind_l1", label: "Transform weapon (L1)", group: "Combat", defaults: ["F", "Mouse Forward"]),
+        BindAction(key: "bind_l2", label: "Firearm (L2)", group: "Combat", defaults: ["Left Ctrl", "Left Shift+Mouse Right", "Mouse Right"]),
+        BindAction(key: "bind_r3", label: "Lock on (R3)", group: "Combat", defaults: ["Q", "Mouse Middle"]),
+        BindAction(key: "bind_cross", label: "Interact, confirm (Cross)", group: "Actions", defaults: ["E", "Return", "Keypad Enter"]),
+        BindAction(key: "bind_square", label: "Quick item (Square)", group: "Actions", defaults: ["R", "Tab"]),
+        BindAction(key: "bind_triangle", label: "Blood Vial (Triangle)", group: "Actions", defaults: ["V"]),
+        BindAction(key: "bind_l3", label: "L3", group: "Actions", defaults: ["X"]),
+        BindAction(key: "bind_dpad_up", label: "Up", group: "D-pad", defaults: ["3", "Up"]),
         BindAction(key: "bind_dpad_down", label: "Down", group: "D-pad", defaults: ["4", "Down", "Wheel Down"]),
-        BindAction(key: "bind_dpad_left", label: "Left (left-hand weapon)", group: "D-pad", defaults: ["1", "Left"]),
-        BindAction(key: "bind_dpad_right", label: "Right (right-hand weapon)", group: "D-pad", defaults: ["2", "Right"]),
+        BindAction(key: "bind_dpad_left", label: "Left (left-hand weapon)", group: "D-pad", defaults: ["1", "Left", "Left Shift+Wheel Down"]),
+        BindAction(key: "bind_dpad_right", label: "Right (right-hand weapon)", group: "D-pad", defaults: ["2", "Right", "Wheel Up"]),
+        BindAction(key: "bind_menu_back", label: "Back in game menus", group: "Menus", defaults: ["Q"]),
         BindAction(key: "bind_options", label: "Menu (Options)", group: "Menus", defaults: ["Escape"]),
         BindAction(key: "bind_touch_left", label: "Gestures (touchpad left)", group: "Menus", defaults: ["G"]),
         BindAction(key: "bind_touch_right", label: "Touchpad right side", group: "Menus", defaults: ["Backspace"]),
@@ -62,6 +63,10 @@ struct Bindings: Equatable {
         self.init()
         for action in Self.actions {
             if let v = ini[action.key] { bound[action.key] = Self.parse(v) }
+        }
+        if ini["bind_circle"] == nil {
+            let separate = Set((bound["bind_dodge"] ?? []) + (bound["bind_sprint"] ?? []))
+            bound["bind_circle"] = (bound["bind_circle"] ?? []).filter { !separate.contains($0) }
         }
     }
 
@@ -114,7 +119,11 @@ struct Bindings: Equatable {
     /// The other actions that use `name`: one key can press several pad inputs, so this is only a
     /// warning.
     func others(using name: String, besides action: BindAction) -> [BindAction] {
-        Self.actions.filter { $0 != action && self[$0].contains(name) }
+        Self.actions.filter {
+            // Lock-on and menu back deliberately share Q in different contexts.
+            $0 != action && Set([$0.key, action.key]) != Set(["bind_r3", "bind_menu_back"])
+                && self[$0].contains(name)
+        }
     }
 
     /// Only the actions changed from the defaults are written (an absent key is the default).

@@ -124,7 +124,8 @@ struct GameSettings: Equatable {
     var mouseLook = false
     /// bbport.ini mouse_sensitivity (0.1-10), mouse_vertical (0.25-4, vertical speed relative to
     /// horizontal), mouse_invert_y: the in-game menu's Mouse card too.
-    var mouseSensitivity = 1.0
+    static let defaultMouseSensitivity = 2.0
+    var mouseSensitivity = defaultMouseSensitivity
     var mouseVertical = 1.0
     var mouseInvertY = false
     /// bbport.ini camera_keys_dpad (src/runtime_bindings.c): with the mouse camera, the camera keys

@@ -166,11 +166,12 @@ do {
 // defaults and key names against it and SDL).
 do {
     let defaults = GameSettings(ini: IniFile())
-    check(defaults.bindings.isDefault && defaults.mouseSensitivity == 1 && defaults.mouseVertical == 1 && !defaults.mouseInvertY && !defaults.cameraKeysDpad && defaults.padMenuCombo, "default controls")
+    check(defaults.bindings.isDefault && defaults.mouseSensitivity == 2 && defaults.mouseVertical == 1 && !defaults.mouseInvertY && !defaults.cameraKeysDpad && defaults.padMenuCombo, "default controls")
+    check(GameSettings(ini: IniFile(text: "mouse_sensitivity=4.01\n")).mouseSensitivity == 4.01, "saved mouse sensitivity preserved")
     var untouched = IniFile(text: "upscaler=off\n")
     defaults.apply(to: &untouched)
     check(!untouched.text.contains("bind_") && untouched["camera_keys_dpad"] == nil, "defaults write no bind_ keys")
-    check(untouched["mouse_sensitivity"] == "1.00" && untouched["mouse_vertical"] == "1.00" && untouched["mouse_invert_y"] == "0", "mouse keys written")
+    check(untouched["mouse_sensitivity"] == "2.00" && untouched["mouse_vertical"] == "1.00" && untouched["mouse_invert_y"] == "0", "mouse keys written")
     check(untouched["pad_menu_combo"] == "1", "pad_menu_combo written")
     var noCombo = GameSettings(ini: IniFile(text: "pad_menu_combo=0\n"))
     check(!noCombo.padMenuCombo, "pad_menu_combo=0 read")
@@ -180,6 +181,11 @@ do {
     check(comboIni["pad_menu_combo"] == "1", "pad_menu_combo turned back on")
 
     let cross = Bindings.actions.first { $0.key == "bind_cross" }!
+    let circle = Bindings.actions.first { $0.key == "bind_circle" }!
+    let legacy = GameSettings(ini: IniFile(text: "bind_dodge=Space\nbind_sprint=Left Shift\n"))
+    check(legacy.bindings[circle].isEmpty, "saved split dodge/run does not acquire a conflicting Space binding")
+    let explicitCircle = GameSettings(ini: IniFile(text: "bind_circle=Space\nbind_dodge=Space\n"))
+    check(explicitCircle.bindings[circle] == ["Space"], "explicit Circle binding kept")
     let dpadDown = Bindings.actions.first { $0.key == "bind_dpad_down" }!
     let r1 = Bindings.actions.first { $0.key == "bind_r1" }!
     let read = GameSettings(ini: IniFile(text: "bind_cross= k , mouse left,Bogus,Left GUI\r\nbind_dpad_down=\nmouse_sensitivity=40\nmouse_vertical=0.5\ncamera_keys_dpad=1\n"))
@@ -194,8 +200,8 @@ do {
 
     let l1 = Bindings.actions.first { $0.key == "bind_l1" }!
     var b = Bindings()
-    b.set(l1, slot: 1, to: "E") // already in slot 0: moved, not duplicated
-    check(b[l1] == ["Mouse Forward", "E"], "no duplicate within an action")
+    b.set(l1, slot: 1, to: "F") // already in slot 0: moved, not duplicated
+    check(b[l1] == ["Mouse Forward", "F"], "no duplicate within an action")
     b = Bindings()
     b.set(l1, slot: 0, to: "G")
     check(b[l1] == ["G", "Mouse Forward"], "replace a slot")
@@ -206,6 +212,8 @@ do {
     // Chords: an input while another is held; "Keypad +" is one key.
     let r2 = Bindings.actions.first { $0.key == "bind_r2" }!
     check(Bindings()[r2] == ["Left Shift+Mouse Left", "Mouse Back"], "the default chord")
+    let lock = Bindings.actions.first { $0.key == "bind_r3" }!
+    check(Bindings().others(using: "Q", besides: lock).isEmpty, "contextual Q is not a binding conflict")
     check(Bindings.canonical(" left shift + mouse left") == "Left Shift+Mouse Left" && Bindings.canonical("Keypad +") == "Keypad +", "chord names canonical")
     check(Bindings.canonical("Left GUI+Q") == nil && Bindings.canonical("Bogus+Q") == nil && Bindings.canonical("Q+Bogus") == nil, "chords the game ignores")
     check(Bindings.chord("Left Ctrl+Keypad +")! == ("Left Ctrl", "Keypad +") && Bindings.chord("Keypad +") == nil, "chord parts")

@@ -81,7 +81,8 @@ struct Values {
     /// Off by default: on, the first left click in the window captures the cursor, for gamepad
     /// players too. Players turn it on in the menu (Display > Mouse camera).
     std::atomic<bool> mouse_look{false};
-    std::atomic<float> mouse_sensitivity{1.0f};
+    static constexpr float DefaultMouseSensitivity = 2.0f;
+    std::atomic<float> mouse_sensitivity{DefaultMouseSensitivity};
     std::atomic<float> mouse_vertical{1.0f};
     std::atomic<bool> mouse_invert_y{false};
     /// L3+R3 on a controller opens this menu (#104: pressed by accident in play). Off, only the

@@ -100,8 +100,14 @@ fi
 touch out/.built
 if [[ ${1:-} == --test ]]; then
     python3 tests/test_launcher_stop.py
-    "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_pad.c src/runtime_bindings.c src/runtime_host.c "${libraries[@]}" -Wl,-rpath,"$PREFIX/lib" -o out/pad-test
+    "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_pad.c src/runtime_bindings.c src/runtime_mouse.c src/runtime_host.c "${libraries[@]}" -Wl,-rpath,"$PREFIX/lib" -o out/pad-test
     out/pad-test
+    "$CC" "${cflags[@]}" -I. -Isrc tests/test_mouse_look.c -o out/mouse-look-test
+    out/mouse-look-test
+    /usr/bin/clang++ "${ARCH[@]}" -std=c++20 -O2 -g -Wall -Wextra -Werror -pthread \
+        -I. -Igpu/shim -Igpu/shadps4 -I"$PREFIX/include" tests/test_mouse_host.cpp \
+        -L"$PREFIX/lib" -lSDL3 -Wl,-rpath,"$PREFIX/lib" -o out/mouse-host-test
+    out/mouse-host-test
     "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_runtime.c "${runtime[@]}" out/libatrac9.a -lm "${gpu[@]}" "${libraries[@]}" -o out/runtime-test
     out/runtime-test
     "$CC" "${cflags[@]}" -I. -Isrc tests/test_render_guard.c src/runtime_render_guard.c -o out/render-guard-test

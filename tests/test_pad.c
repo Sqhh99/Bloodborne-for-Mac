@@ -57,11 +57,11 @@ static void test_bindings(void) {
     assert(d.left_y==127);
     d=PRESS(SDL_SCANCODE_LALT,SDL_SCANCODE_A,SDL_SCANCODE_S);
     assert(d.left_x==64 && d.left_y==192);
-    d=PRESS(SDL_SCANCODE_F,SDL_SCANCODE_R,SDL_SCANCODE_Q,SDL_SCANCODE_E);
+    d=PRESS(SDL_SCANCODE_E,SDL_SCANCODE_R,SDL_SCANCODE_V,SDL_SCANCODE_F);
     assert(d.buttons==(BTN_CROSS|BTN_SQUARE|BTN_TRIANGLE|BTN_L1) && d.l2==0 && d.r2==0);
     d=PRESS(SDL_SCANCODE_KP_ENTER,SDL_SCANCODE_ESCAPE,SDL_SCANCODE_3,SDL_SCANCODE_RIGHT);
     assert(d.buttons==(BTN_CROSS|BTN_OPTIONS|BTN_UP|BTN_RIGHT));
-    d=PRESS(SDL_SCANCODE_1,SDL_SCANCODE_2,SDL_SCANCODE_4,SDL_SCANCODE_LCTRL,SDL_SCANCODE_C,SDL_SCANCODE_TAB);
+    d=PRESS(SDL_SCANCODE_1,SDL_SCANCODE_2,SDL_SCANCODE_4,SDL_SCANCODE_X,SDL_SCANCODE_Q,SDL_SCANCODE_TAB);
     assert(d.buttons==(BTN_LEFT|BTN_RIGHT|BTN_DOWN|BTN_L3|BTN_R3|BTN_SQUARE));
     memset(keys,0,sizeof keys); keys[SDL_SCANCODE_G]=true; /* not pressed through the pad: touch ids are checked below */
     assert(runtime_bindings_held(keys,0)==(UINT64_C(1)<<BIND_TOUCH_LEFT));
@@ -75,43 +75,45 @@ static void test_bindings(void) {
     d=PRESS(SDL_SCANCODE_LGUI,SDL_SCANCODE_Q);
     assert(d.buttons==0); /* Cmd+Q is the Mac's */
 
-    /* Circle: the run holds it; the dodge is a 90 ms press however long Space is held. */
+    /* Soul 3's Space is the real button: a tap/release dodges; holding it keeps running.
+     * Shift is only a chord modifier now, so a heavy attack cannot also start a sprint. */
     d=PRESS(SDL_SCANCODE_LSHIFT,SDL_SCANCODE_W);
-    assert(d.buttons==BTN_CIRCLE);
+    assert(d.buttons==0);
     d=PRESS(SDL_SCANCODE_W);
     assert(d.buttons==0);
     d=PRESS(SDL_SCANCODE_SPACE);
     assert(d.buttons==BTN_CIRCLE);
     usleep(120000);
     d=PRESS(SDL_SCANCODE_SPACE);
-    assert(d.buttons==0); /* still held: no run */
+    assert(d.buttons==BTN_CIRCLE); /* still held: keep running */
     d=PRESS(SDL_SCANCODE_W);
     assert(d.buttons==0);
-    /* The jump, Space while running: Circle let go, pressed, let go, held again. */
-    d=PRESS(SDL_SCANCODE_LSHIFT);
-    assert(d.buttons==BTN_CIRCLE);
-    d=PRESS(SDL_SCANCODE_LSHIFT,SDL_SCANCODE_SPACE);
-    assert(d.buttons==0);
-    usleep(90000);
-    d=PRESS(SDL_SCANCODE_LSHIFT,SDL_SCANCODE_SPACE);
-    assert(d.buttons==BTN_CIRCLE);
-    usleep(70000);
-    d=PRESS(SDL_SCANCODE_LSHIFT);
-    assert(d.buttons==0);
-    usleep(70000);
-    d=PRESS(SDL_SCANCODE_LSHIFT);
-    assert(d.buttons==BTN_CIRCLE);
+    d=PRESS(SDL_SCANCODE_SPACE,SDL_SCANCODE_W);
+    assert(d.buttons==BTN_CIRCLE && d.left_y==0); /* repress while running: native jump input */
     (void)PRESS(SDL_SCANCODE_W);
+    /* Custom split dodge/run bindings keep the short dodge and timed jump sequence. */
+    dodge_pulse_until=jump_start_us=0; dodge_was_down=0;
+    assert(keyboard_circle(1,0,1000000));
+    assert(!keyboard_circle(1,0,1120000));
+    assert(keyboard_circle(0,1,1200000));
+    assert(!keyboard_circle(1,1,1300000));
+    assert(keyboard_circle(1,1,1390000));
+    assert(!keyboard_circle(0,1,1460000));
+    assert(keyboard_circle(0,1,1530000));
+    dodge_pulse_until=jump_start_us=0; dodge_was_down=0;
 
     /* The mouse: left R1, Shift + left R2 alone (the chord hides the plain click), right L2, the
      * side buttons R2 and L1, the wheel the d-pad. */
-    const uint64_t r1=UINT64_C(1)<<BIND_R1, r2=UINT64_C(1)<<BIND_R2, sprint=UINT64_C(1)<<BIND_SPRINT;
+    const uint64_t r1=UINT64_C(1)<<BIND_R1, r2=UINT64_C(1)<<BIND_R2;
     assert(runtime_bindings_held(NULL,SDL_BUTTON_LMASK|SDL_BUTTON_RMASK)==(r1|(UINT64_C(1)<<BIND_L2)));
     assert(runtime_bindings_held(NULL,SDL_BUTTON_X1MASK|SDL_BUTTON_X2MASK)==(r2|(UINT64_C(1)<<BIND_L1)));
     memset(keys,0,sizeof keys); keys[SDL_SCANCODE_LSHIFT]=true;
-    assert(runtime_bindings_held(keys,SDL_BUTTON_LMASK)==(r2|sprint));
-    assert(runtime_bindings_held(keys,0)==sprint);
-    assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_UP));
+    assert(runtime_bindings_held(keys,SDL_BUTTON_LMASK)==r2);
+    assert(runtime_bindings_held(keys,0)==0);
+    assert(runtime_bindings_held(keys,SDL_BUTTON_RMASK)==(UINT64_C(1)<<BIND_L2));
+    assert(runtime_bindings_held(keys,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_RIGHT));
+    assert(runtime_bindings_held(keys,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_LEFT));
+    assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_RIGHT));
     assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_DOWN));
     assert(runtime_bindings_use_wheel());
 
@@ -119,9 +121,18 @@ static void test_bindings(void) {
     int fd=mkstemp(path);
     assert(fd>=0);
     close(fd);
+    write_file(path,"bind_dodge=Space\nbind_sprint=Left Shift\n");
+    runtime_bindings_load(path);
+    assert(runtime_bindings_held(keys,0)==(UINT64_C(1)<<BIND_SPRINT));
+    d=PRESS(SDL_SCANCODE_SPACE);
+    assert(d.buttons==BTN_CIRCLE);
+    usleep(120000);
+    d=PRESS(SDL_SCANCODE_SPACE);
+    assert(d.buttons==0); /* the new default cannot turn a saved short dodge into sprint */
+    (void)PRESS(SDL_SCANCODE_UNKNOWN);
     write_file(path,"# comment\r\nupscaler=metalfx\r\nbind_cross = K , Mouse Left\r\nbind_dpad_down=\r\nbind_dpad_up=3\r\n"
                     "bind_square=Left GUI,Bogus,y,Left GUI+H,Bogus+H\r\nbind_r1=Wheel Up\r\nbind_walk=CapsLock\r\ncamera_keys_dpad=1\r\n"
-                    "bind_circle=Left Ctrl + Keypad +, X\r\nbind_r2=Left Alt+F\r\nbind_l2=F\r\n");
+                    "bind_circle=Left Ctrl + Keypad +, Z\r\nbind_r2=Left Alt+F\r\nbind_l2=F\r\nbind_l1=E\r\nbind_dpad_right=2,Right\r\n");
     runtime_bindings_load(path);
     d=PRESS(SDL_SCANCODE_K);
     assert(d.buttons==BTN_CROSS && d.right_y==255); /* K is Cross now, and still the camera's down */
@@ -134,8 +145,8 @@ static void test_bindings(void) {
     d=PRESS(SDL_SCANCODE_KP_PLUS);
     assert(d.buttons==0);
     d=PRESS(SDL_SCANCODE_LCTRL,SDL_SCANCODE_KP_PLUS);
-    assert(d.buttons==(BTN_CIRCLE|BTN_L3)); /* "Keypad +" is one key, the chord's second */
-    d=PRESS(SDL_SCANCODE_X);
+    assert(d.buttons==BTN_CIRCLE); /* "Keypad +" is one key, the chord's second */
+    d=PRESS(SDL_SCANCODE_Z);
     assert(d.buttons==BTN_CIRCLE); /* the plain Circle button: held */
     d=PRESS(SDL_SCANCODE_4);
     assert(d.buttons==0); /* unbound */
@@ -151,13 +162,129 @@ static void test_bindings(void) {
     assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_R1));
     assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==0);
     assert(runtime_bindings_use_wheel());
-    write_file(path,"bind_dpad_up=3\nbind_dpad_down=4\n");
+    write_file(path,"bind_dpad_up=3\nbind_dpad_down=4\nbind_dpad_left=Left\nbind_dpad_right=Right\n");
     runtime_bindings_load(path);
     assert(!runtime_bindings_use_wheel());
     unlink(path);
     runtime_bindings_load(NULL);
     memset(keys,0,sizeof keys);
     use_keys=0;
+}
+
+/* Menu aliases are contextual, including the title screen. No speculative pointer can crash
+ * input polling, and holding Back across a close cannot turn into a fresh lock-on. */
+static void test_menu_keys(void) {
+    const size_t size=MENU_FLOW_OFFSET+sizeof(uintptr_t);
+    unsigned char *image=calloc(1,size),flow[0xb12]={0};
+    assert(image);
+    const unsigned char signature[]={0x55,0x48,0x89,0xe5,0x41,0x57};
+    memcpy(image+MENU_LIST_UPDATE_OFFSET,signature,sizeof signature);
+    uintptr_t ptr=(uintptr_t)flow,menu=1;
+    memcpy(image+MENU_FLOW_OFFSET,&ptr,sizeof ptr);
+    flow[0xb11]=1;
+    use_keys=1; runtime_bindings_load(NULL);
+    runtime_pad_set_image(image,size-1);
+    assert(!menu_flow_address);
+    runtime_pad_set_image(image,size);
+    assert(menu_flow_address && !game_menu_active());
+    PadData d=PRESS(SDL_SCANCODE_W);
+    assert(d.left_y==0 && d.buttons==0);
+    d=PRESS(SDL_SCANCODE_ESCAPE);
+    assert(d.buttons==BTN_OPTIONS);
+    memcpy(flow+0xa88,&menu,sizeof menu);
+    assert(game_menu_active());
+    d=PRESS(SDL_SCANCODE_ESCAPE);
+    assert(d.buttons==BTN_OPTIONS); /* same press that opened the menu */
+    (void)PRESS(SDL_SCANCODE_UNKNOWN);
+    d=PRESS(SDL_SCANCODE_ESCAPE);
+    assert(d.buttons==BTN_CIRCLE);
+    d=PRESS(SDL_SCANCODE_W,SDL_SCANCODE_D);
+    assert(d.buttons==(BTN_UP|BTN_RIGHT) && d.left_x==128 && d.left_y==128);
+    d=PRESS(SDL_SCANCODE_A,SDL_SCANCODE_S);
+    assert(d.buttons==(BTN_LEFT|BTN_DOWN) && d.left_x==128 && d.left_y==128);
+    d=PRESS(SDL_SCANCODE_W,SDL_SCANCODE_S);
+    assert(!d.buttons && d.left_y==128);
+    d=PRESS(SDL_SCANCODE_E);
+    assert(d.buttons==BTN_CROSS);
+    d=PRESS(SDL_SCANCODE_Q);
+    assert(d.buttons==BTN_CIRCLE); /* not R3 and never a blood vial */
+    menu=0; memcpy(flow+0xa88,&menu,sizeof menu);
+    d=PRESS(SDL_SCANCODE_Q);
+    assert(!d.buttons); /* Back still held after the menu closed */
+    (void)PRESS(SDL_SCANCODE_UNKNOWN);
+    d=PRESS(SDL_SCANCODE_Q);
+    assert(d.buttons==BTN_R3);
+    flow[0xb11]=0;
+    assert(game_menu_active()); /* title menu has no active in-game menu object */
+    d=PRESS(SDL_SCANCODE_S);
+    assert(d.buttons==BTN_DOWN && d.left_y==128);
+    ptr=1; memcpy(image+MENU_FLOW_OFFSET,&ptr,sizeof ptr);
+    assert(!game_menu_active()); /* unmapped pointer is harmless */
+    ptr=UINTPTR_MAX-8; memcpy(image+MENU_FLOW_OFFSET,&ptr,sizeof ptr);
+    assert(!game_menu_active());
+    image[MENU_LIST_UPDATE_OFFSET]^=1;
+    runtime_pad_set_image(image,size);
+    assert(!menu_flow_address);
+    runtime_pad_set_image(NULL,0);
+    free(image); use_keys=0; memset(keys,0,sizeof keys);
+}
+
+static void test_mouse_response(void) {
+    uint8_t x=128,y=128;
+    mouse_stick(0,0,&x,&y);
+    assert(x==128 && y==128);
+    mouse_stick(100,0,&x,&y);
+    const uint8_t slow=x;
+    assert(slow>152 && slow<255 && y==128);
+    mouse_stick(200,0,&x,&y); /* new default 2x sensitivity */
+    assert(x>slow && x<255 && y==128);
+    mouse_stick(MOUSE_FULL_SPEED,0,&x,&y);
+    assert(x==255 && y==128);
+    mouse_stick(-100000,0,&x,&y);
+    assert(x==1 && y==128);
+    mouse_stick(100000,100000,&x,&y);
+    assert(x==y && x<255); /* radial cap, not faster along diagonals */
+    x=128; y=128;
+    mouse_stick(NAN,0,&x,&y); mouse_stick(INFINITY,1,&x,&y);
+    assert(x==128 && y==128);
+}
+
+static void test_wheel_pulses(void) {
+    runtime_bindings_load(NULL);
+    WheelPulse pulse={0};
+    BbGpuMouseSample input={.epoch=1,.captured=1};
+    uint64_t now=1000000;
+    wheel_pulse(&pulse,&input,now,1);
+    input.wheel_serial+=1000; input.wheel_direction=-1; input.wheel_ns=now*1000;
+    wheel_pulse(&pulse,&input,now,1);
+    assert(pulse.started && pulse.direction==-1 && pulse.press_until==now+35000);
+    bool shift[512]={0}; shift[SDL_SCANCODE_LSHIFT]=true;
+    pulse.actions=runtime_bindings_wheel_actions(shift,BIND_WHEEL_DOWN_MASK);
+    assert(pulse.actions==(UINT64_C(1)<<BIND_DPAD_LEFT));
+    shift[SDL_SCANCODE_LSHIFT]=false;
+    for (int i=1;i<=10;++i) {
+        now=1000000+(uint64_t)i*2000;
+        input.wheel_serial+=500; input.wheel_ns=now*1000;
+        wheel_pulse(&pulse,&input,now,1);
+        assert(!pulse.started && pulse.direction==-1 && pulse.press_until==1035000);
+        assert(pulse.actions==(UINT64_C(1)<<BIND_DPAD_LEFT)); /* modifier is latched */
+    }
+    wheel_pulse(&pulse,&input,1040000,1);
+    assert(!pulse.direction && !pulse.actions);
+    wheel_pulse(&pulse,&input,2000000,1);
+    assert(!pulse.direction); /* thousands of scroll steps cannot replay after stopping */
+    ++input.wheel_serial; input.wheel_ns=2000000*UINT64_C(1000);
+    wheel_pulse(&pulse,&input,2000000,1); assert(pulse.direction==-1);
+    ++input.wheel_serial; input.wheel_direction=1; input.wheel_ns=2001000*UINT64_C(1000);
+    wheel_pulse(&pulse,&input,2001000,1); assert(pulse.started && pulse.direction==1);
+    wheel_pulse(&pulse,&input,2002000,0); assert(!pulse.direction);
+    wheel_pulse(&pulse,&input,2003000,1); assert(!pulse.direction);
+    ++input.wheel_serial; input.wheel_ns=1;
+    wheel_pulse(&pulse,&input,2004000,1); assert(!pulse.direction); /* stale event */
+    ++input.epoch; input.wheel_ns=2005000*UINT64_C(1000);
+    wheel_pulse(&pulse,&input,2005000,1); assert(!pulse.direction);
+    assert(runtime_bindings_wheel_actions(shift,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_RIGHT));
+    assert(!(runtime_bindings_wheel_actions(shift,BIND_WHEEL_UP_MASK)&(UINT64_C(1)<<BIND_DPAD_UP)));
 }
 
 /* The launcher's tables (launcher/Model/KeyCodes.swift, Bindings.swift) against SDL and
@@ -289,6 +416,9 @@ int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMEPAD));
     assert(pad_init()==0 && pad_open(1,0,0,NULL)==1);
     test_bindings();
+    test_menu_keys();
+    test_mouse_response();
+    test_wheel_pulses();
     test_launcher_tables();
     PadData data;
     inject(path,"cross l3 touchpad_left");
