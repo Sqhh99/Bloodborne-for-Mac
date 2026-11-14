@@ -129,6 +129,13 @@ extern volatile int runtime_bench_map_opened; /* runtime_file.c: a map file was 
 void runtime_pad_report(void);
 /* Mouse look reads the GPU process's shared block through this accessor (gpu_process_start). */
 void runtime_pad_set_shared(void *(*shared)(void));
+/* Validates the supported game's menu layout; enables contextual keyboard menu navigation. */
+void runtime_pad_set_image(unsigned char *image, uint64_t image_size);
+int runtime_pad_menu_active(void);
+void runtime_mouse_set_shared(void *(*shared)(void));
+int runtime_install_mouse_look(unsigned char *image, uint64_t size);
+int runtime_mouse_direct_active(void);
+const char *runtime_mouse_patch_conflict(uint64_t offset, const unsigned char *data, size_t size);
 uintptr_t runtime_rtc_resolve(const char *name);
 const char *runtime_file_user_dir(void);
 void runtime_savedata_configure(const char *title);

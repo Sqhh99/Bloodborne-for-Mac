@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cmath>
+#include <time.h>
 #include "bbport_overlay.h"
 #include "bbport_settings.h"
 #include "bbport_split.h"
@@ -12,7 +13,7 @@ namespace {
 
 // The speed is the motion of the last SpeedWindow, so it does not depend on how often the game
 // samples its pad, and falls to zero once the mouse stops.
-constexpr u64 SpeedWindow = 33'000'000; // ns
+constexpr u64 SpeedWindow = 16'000'000; // ns: respond / stop within about one 60 Hz frame
 
 struct Motion {
     u64 ns;
@@ -23,6 +24,14 @@ size_t next_motion = 0;
 bool captured = false;
 u32 buttons = 0;
 float wheel = 0.0f; // scrolled since the last whole step (trackpads scroll in fractions)
+double total_x = 0.0, total_y = 0.0;
+BbGpuMouseSample input{};
+
+u64 MonotonicNs() {
+    timespec ts{};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return u64(ts.tv_sec) * 1'000'000'000 + u64(ts.tv_nsec);
+}
 // A cursor left still over the game hides after a moment (#93); moving or clicking shows it.
 // (While captured, relative mouse mode hides it anyway.)
 constexpr u64 IdleCursorNs = 3'000'000'000;
@@ -51,11 +60,22 @@ void SetCaptured(SDL_Window* window, BbGpuShared* s, bool on) {
     captured = on;
     buttons = 0;
     wheel = 0.0f;
+    total_x = total_y = 0.0;
+    ++input.epoch;
+    input.captured = on;
+    input.x = input.y = 0;
+    input.motion_ns = 0;
+    bbgpu_mouse_publish(&s->mouse_input, &input);
     motions.fill({});
     Publish(s, 0.0f, 0.0f);
 }
 
 } // namespace
+
+void ConfigureInput() {
+    SDL_SetHint(SDL_HINT_MAC_SCROLL_MOMENTUM, "0");
+    SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE, "0");
+}
 
 bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
     BbGpuShared* s = BbSplit::Host() ? BbSplit::Shared() : nullptr;
@@ -92,18 +112,37 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
         }
         motions[next_motion++ % motions.size()] = {event.motion.timestamp, event.motion.xrel,
                                                    event.motion.yrel};
+        {
+            const auto& settings = BbSettings::Get();
+            const double dx = double(event.motion.xrel) * settings.mouse_sensitivity;
+            const double dy = double(event.motion.yrel) * settings.mouse_sensitivity *
+                              settings.mouse_vertical * (settings.mouse_invert_y ? -1.0 : 1.0);
+            if (std::isfinite(dx) && std::isfinite(dy)) {
+                total_x += dx;
+                total_y += dy;
+                input.x = std::llround(total_x * BBGPU_MOUSE_POINT_SCALE);
+                input.y = std::llround(total_y * BBGPU_MOUSE_POINT_SCALE);
+                input.motion_ns = MonotonicNs();
+                bbgpu_mouse_publish(&s->mouse_input, &input);
+            }
+        }
         return true;
     case SDL_EVENT_MOUSE_WHEEL: {
         if (!captured) {
             return false;
         }
         // Whole steps in the direction the wheel turned, whatever "natural scrolling" says.
-        wheel += event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
-        for (; wheel >= 1.0f; wheel -= 1.0f) {
-            __atomic_add_fetch(&s->mouse_wheel_up, 1u, __ATOMIC_RELAXED);
-        }
-        for (; wheel <= -1.0f; wheel += 1.0f) {
-            __atomic_add_fetch(&s->mouse_wheel_down, 1u, __ATOMIC_RELAXED);
+        const float delta = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
+        if (!std::isfinite(delta)) return true;
+        if (delta * wheel < 0) wheel = 0; // reversing cannot inherit a fraction of the old direction
+        wheel += delta;
+        if (std::abs(wheel) >= 1.0f) {
+            input.wheel_direction = wheel > 0 ? 1 : -1;
+            ++input.wheel_serial; // a large accelerated OS event is one gesture, never a backlog
+            input.wheel_ns = MonotonicNs();
+            bbgpu_mouse_publish(&s->mouse_input, &input);
+            __atomic_add_fetch(wheel > 0 ? &s->mouse_wheel_up : &s->mouse_wheel_down, 1u, __ATOMIC_RELAXED);
+            wheel = std::fmod(wheel, 1.0f);
         }
         return true;
     }
@@ -141,7 +180,7 @@ void Update(SDL_Window* window) {
     }
     float dx = 0.0f, dy = 0.0f;
     for (const Motion& m : motions) {
-        if (m.ns && m.ns + SpeedWindow >= now) {
+        if (m.ns && m.ns <= now && now - m.ns < SpeedWindow) {
             dx += m.dx;
             dy += m.dy;
         }

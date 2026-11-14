@@ -2,6 +2,23 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
+## Unreleased: Dark Souls III controls and faster mouse response
+
+- Default keyboard controls now use E to interact, Q to lock on / go back in menus, Space for
+  native tap-to-dodge / hold-to-run, F to transform and Shift + wheel to switch weapons.
+  Bloodborne's blood vial uses V; R stays the quick item. Ctrl and right click fire the gun.
+- WASD navigates game menus and the Mac overlay, without switching equipment while moving.
+  A menu-closing Q press cannot become lock-on until released; Shift + attack no longer sprints.
+- Free look follows mouse displacement directly: equal distances produce equal turns at any
+  swipe speed. The native camera path removes stick acceleration / dead zones / maximum turn
+  speed and consumes each movement only once. Menus and focus changes discard stale turns.
+- Scroll bursts no longer build a queue that keeps changing items after scrolling stops.
+  Wheel up switches the right weapon, down the quick item; blood bullets remain 3 / Up so
+  scrolling cannot accidentally spend health. Shift + wheel actions stay latched until release.
+- Default mouse sensitivity is 2.00. Both sensitivity sliders offer finer adjustment and a
+  reset. Saved custom bindings and sensitivity values are kept; lock-on / unsupported camera
+  modes retain a stick fallback.
+
 ## New in 0.5.15: remappable controller buttons
 
 - **Controller buttons can be remapped** in the launcher: **Controls > Controller > Controller

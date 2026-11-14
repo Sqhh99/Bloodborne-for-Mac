@@ -25,6 +25,8 @@ enum {
     /* Circle by what it does (runtime_pad.c keyboard_circle): a tap whatever the key does (the
      * dodge), Circle held (the run), and both together the jump. BIND_CIRCLE is the plain button. */
     BIND_DODGE, BIND_SPRINT,
+    /* Only in game menus; Q can therefore lock on during play without pressing Circle. */
+    BIND_MENU_BACK,
     BIND_COUNT
 };
 
@@ -54,6 +56,7 @@ enum {
 void runtime_bindings_load(const char *ini_path);
 /* The actions held (bit per BIND_*), from SDL's keyboard state (NULL: none) and the mouse mask. */
 uint64_t runtime_bindings_held(const bool *keys, uint32_t mouse);
+uint64_t runtime_bindings_wheel_actions(const bool *keys, uint32_t wheel);
 /* bbport.ini camera_keys_dpad (default off: the arrow keys are the d-pad already): while the
  * mouse turns the camera, the camera keys press the d-pad instead. */
 bool runtime_bindings_camera_keys_dpad(void);
@@ -66,7 +69,7 @@ int runtime_bindings_pad(int input, int slot);
 const char *runtime_bindings_pad_key(int input);
 const char *runtime_bindings_pad_default(int input);
 const char *runtime_bindings_pad_name(int button);
-/* The ini key of an action ("bind_cross") and its default list ("F,Return,Keypad Enter"),
+/* The ini key of an action ("bind_cross") and its default list ("E,Return,Keypad Enter"),
  * for logs and tests. */
 const char *runtime_bindings_key(int action);
 const char *runtime_bindings_default(int action);

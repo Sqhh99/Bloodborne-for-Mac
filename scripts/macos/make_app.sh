@@ -50,7 +50,6 @@ EOF
 # The launcher window (launcher/, Swift). The checkout's path is in Info.plist (BBRepository).
 bash scripts/macos/build_launcher.sh
 install -m755 out/launcher/Bloodborne "$app/Contents/MacOS/Bloodborne"
-codesign --force --sign - "$app/Contents/MacOS/Bloodborne"
 ln -s "$repo/out/bbgpu-host" "$app/Contents/MacOS/bbgpu-host"
 ln -s "$repo/out/bbgpu-host-macos27" "$app/Contents/MacOS/bbgpu-host-macos27"
 
@@ -71,5 +70,11 @@ if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
 else
     echo "No game folder known yet (launch.conf): the app has no icon. Run this again after the first launch."
 fi
+# Sign the completed bundle: adding its icon or executable links after signing invalidates
+# the resource seal even though the launcher executable itself has not changed.
+codesign --force --sign - "$app"
+# This checkout app intentionally links to out/. Strict validation rejects external symlinks;
+# the self-contained release bundle in package_app.sh is verified with --strict instead.
+codesign --verify --deep "$app"
 touch "$app"
 echo "Built $app"

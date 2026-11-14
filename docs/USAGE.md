@@ -243,7 +243,7 @@ saves and settings as the Finder launcher.
 ### In the game
 
 - **System → Mac Settings:** one native game-menu entry for renderer, quality, effects and
-  launch settings. Use Left/Right on **Page**, or L1/R1 (keyboard: E / left click), to change groups.
+  launch settings. Use Left/Right on **Page**, or L1/R1 (keyboard: F / left click), to change groups.
   Changes save to the same `bbport.ini`; `*` marks changes requiring a restart. On the final
   page, enable **Confirm restart**, then **Restart now**. Native ultrawide remains a launcher
   setting. The menu uses English captions in every supported game language.

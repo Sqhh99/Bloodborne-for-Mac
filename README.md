@@ -28,28 +28,34 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
 
 ## What this fork changes
 
-- **Keyboard and mouse default to Dark Souls III's PC layout**, the one
-  [bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac) uses. Every binding
-  can still be changed on the launcher's **Controls** page.
+- **Keyboard and mouse follow Dark Souls III's default PC layout**, with compatible controls
+  for Bloodborne's gun, weapon transformation and blood vials. Every binding can still be
+  changed on the launcher's **Controls** page.
 
   | | Keys |
   |---|---|
   | Move | W A S D; hold Left ⌥ to walk |
   | Camera | the mouse (turn on **Mouse camera**), or I J K L |
-  | Dodge / run / jump | Space / hold Left ⇧ / Space while running |
+  | Dodge / run / jump | tap Space / hold Space / release and quickly press Space again while running |
   | Attack (R1) / charged attack (R2) | left click / ⇧ + left click, or the mouse's back button |
-  | Firearm (L2) / transform weapon (L1) | right click / E, or the mouse's forward button |
-  | Lock on (R3) | C or middle click |
-  | Interact, confirm (Cross) | F, Return |
-  | Quick item (Square) / Blood Vial (Triangle) | R or Tab / Q |
-  | Switch weapons, quick items (d-pad) | 1 left hand, 2 right hand, 3 up, 4 down; the arrow keys; the wheel (up, down) |
+  | Firearm (L2) / transform weapon (L1) | Left Ctrl, right click or ⇧ + right click / F, or the mouse's forward button |
+  | Lock on (R3) | Q or middle click |
+  | Interact, confirm (Cross) | E, Return |
+  | Quick item (Square) / Blood Vial (Triangle) | R or Tab / V |
+  | Switch weapons, quick items (d-pad) | 1 / ← left hand, 2 / → / wheel up right hand, 4 / ↓ / wheel down quick item; ⇧ + wheel down left hand |
+  | Blood bullets (costs health) | 3 / ↑; deliberately not on the wheel |
   | Menu (Options) / gestures (touchpad) | Esc / G (right side: Delete ⌫) |
-  | L3 | Left ⌃ |
+  | L3 | X |
 
-  In the game's menus the arrow keys move, F or Return confirms, and Space (or Left ⇧) goes
-  back. A binding can now be a chord, `bind_r2=Left Shift+Mouse Left`: in the launcher, hold the
-  modifier and press the key or click. `bind_dodge` and `bind_sprint` are new actions; an older
-  `bbport.ini` with its own `bind_` lines keeps them.
+  In the game's menus WASD and the arrows navigate, E or Return confirms, and Q, Space or Esc
+  goes back. WASD never presses the d-pad during gameplay. Q only locks on outside menus.
+  V avoids the blood-vial conflict with Q (lock-on) and R (quick item); F transforms instead of
+  changing the grip. The free camera follows mouse **distance**, independent of swipe speed,
+  without a stick dead zone or maximum turn rate. Scroll bursts coalesce into short presses
+  and never replay after stopping. Mouse sensitivity defaults to **2.00**, with a logarithmic
+  slider and **Reset mouse sensitivity** in the launcher and overlay. Saved sensitivity values
+  and explicit `bind_` overrides are kept. Separate
+  `bind_dodge` / `bind_sprint` keys remain available, unbound by default.
 - **The launcher speaks English, 日本語 and 简体中文.** It follows the Mac's language; **General →
   Launcher → Language** chooses one (`BB_LANGUAGE=en|ja|zh` in `launch.conf`). The in-game
   overlay (⌘,), the game's Mac Settings page, crash reports and logs stay in English.

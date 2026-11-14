@@ -22,29 +22,40 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   `UCKeyTranslate`) or `Mouse Left/Right/Middle/Back/Forward`, `Wheel Up/Down`. Absent key =
   default, empty = unbound. The launcher writes only changed actions. Cmd is reserved.
   The in-game menu's Save keeps these keys (not owned).
-- **Defaults = Dark Souls III's PC layout** (2026-11-13, as bloodborne-mac's
-  `runtime/src/runtime_pad.c` `bind_defaults`; before: the 0.5.9 layout). WASD move, IJKL camera,
-  Space dodge, Left Shift run, Left Alt walk, F / Return Cross, Q Triangle, Tab / R Square, E L1,
-  C R3, Left Ctrl L3, Escape Options, G / Backspace touchpad left / right, d-pad on 1 2 3 4, the
-  arrow keys and the wheel; mouse left R1, Shift + left R2, right L2, middle R3, back R2,
-  forward L1. An ini with its own `bind_` lines keeps them; only absent keys get the new defaults.
-- **Dodge, run, jump** (`bind_dodge`, `bind_sprint`; `keyboard_circle` in `src/runtime_pad.c`):
+- **Defaults follow Dark Souls III's actual PC layout** (2026-11-13), with Bloodborne
+  compatibility: WASD move, IJKL camera, Space Circle (tap dodge / hold sprint / release and
+  repress while sprinting to jump), Left Alt walk, E / Return Cross, V Triangle, R / Tab Square,
+  F L1, Q / middle click R3, X L3, Escape Options, G / Backspace touchpad left / right. The d-pad
+  uses 1 2 3 4 and arrows. Wheel up changes the right weapon, down the quick item; Shift + wheel
+  down changes the left weapon. Blood bullets remain 3 / Up, off the wheel to avoid health loss.
+  Mouse left R1, Shift + left / back R2, Ctrl / right / Shift + right L2, forward L1. V keeps
+  vials separate from Q lock-on and R quick items; F transforms instead of changing the grip.
+  An ini with its own `bind_` lines keeps them; only absent keys get the new defaults.
+- **Menu context:** `runtime_pad_set_image` checks the 1.09 list-update signature at image
+  offset 0x1acff30; the menu-flow pointer at 0x5580e38, +0xa88 menu object and +0xb11 title flag
+  are kernel-read safely (layout documented by bloodborne-mac's menu pointer module). In menus
+  movement bindings press only the d-pad; elsewhere they move only the stick. `bind_menu_back`
+  (Q) presses Circle only in menus, suppressing R3 until release. Escape switches to Back after
+  its opening press is released. Missing/unsupported images disable contextual aliases.
+- **Optional separate dodge, run, jump** (`bind_dodge`, `bind_sprint`, both unbound by default;
+  `keyboard_circle` in `src/runtime_pad.c`):
   Circle by what it does. The dodge is a 90 ms Circle press however long the key is held (held,
   the game would run); the run holds Circle; the dodge key while running is the jump (Circle
   let go 70 ms, pressed 70 ms, let go 70 ms, held again). `bind_circle` (the plain button, for
-  "back" in menus) has no default key: Space and Left Shift press Circle there too.
+  "back" in menus) is Space by default, passed through to the game's native tap/hold handling.
 - **Chords:** `Left Shift+Mouse Left` counts while both are held, and the second input's plain
-  bindings do not count meanwhile (Shift + click is R2, not R2 and R1; the Shift itself still
-  runs). `Keypad +` is one key (nothing follows its plus). The launcher's capture sheet binds a
+  bindings do not count meanwhile (Shift + click is R2, not R2 and R1; Shift is no longer a
+  sprint binding). `Keypad +` is one key (nothing follows its plus). The launcher's capture sheet binds a
   modifier when it is let go, or the chord when another key or a mouse button is pressed with it.
 - `camera_keys_dpad` (default 0 since the arrow keys are the d-pad by default; it was 1): while
   the mouse has the camera, keys bound to the camera press the d-pad instead.
-- **Not ported from bloodborne-mac:** Escape as Circle (back) while a game menu is open, and
-  clicks in menus. They need its menu detection (`bbgpu_pointer_wanted`, its pointer menus);
-  here Escape is always Options (it closes the menu). Its key-as-stick ramps (`key_stick`) and
+- **Not ported from bloodborne-mac:** mouse pointer clicks in game menus. Its
+  key-as-stick ramps (`key_stick`) and
   short-tap latch are not ported either. See MACOS_BACKLOG (Mac GUI).
-- **Wheel:** the host counts whole steps (physical direction, trackpad fractions accumulated);
-  the game turns each step into a 50 ms press + 50 ms release, at most 8 queued.
+- **Wheel:** physical direction, fractional trackpad steps accumulated. One accelerated OS event
+  is one gesture. The latest event starts a 35 ms press / 35 ms release; extra same-direction
+  steps during that interval are consumed, never queued or replayed. Reversing cancels the old
+  direction. Each pulse latches its bound actions, so releasing Shift cannot change its meaning.
 - Mouse buttons and the wheel reach the game only while the window holds the cursor (Mouse
   camera on, after a click), as before.
 - **Launcher:** third page "Controls" (the page switcher is not a TabView, #47): Mouse
@@ -55,18 +66,31 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
 
 ## Mouse speed
 
-Why it feels slow: the mouse emulates the right stick. Speed over the last 33 ms → deflection,
-full at 650 points/s (`MOUSE_FULL_SPEED`), never below 24 (dead zone). Above that, faster mouse
-movement changes nothing: the camera's top speed is the game's full-stick turn rate. Sensitivity
-only reaches the ceiling sooner. The game's own Camera speed option raises the ceiling.
+The free camera now consumes cumulative mouse displacement, not speed. `bbport_mouse.cpp`
+publishes scaled fixed-point totals (65536 units/point), capture epoch, monotonic event time and
+the latest wheel event under a bounded seqlock (`host/bbgpu_mouse_input.h`, shared version 13).
+Every SDL motion event contributes, even between game frames. Sensitivity / vertical ratio /
+inversion are applied once, at the producer. Default sensitivity remains 2.00; saved values stay.
+Before SDL video starts, scroll momentum and relative system acceleration are disabled for the
+game window (`SDL_HINT_MAC_SCROLL_MOMENTUM`, `SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE`).
 
-1. **Retune (next; needs one scripted run on the Mac):** measure camera turn rate per stick value
-   with the pad file (`BB_PAD_FILE`, `rx=`), build the inverse table so mouse speed maps linearly to
-   turn rate up to the ceiling, shorten the speed window, then a test build for players.
-2. **Direct camera (spike, ≤ 1 day):** find the camera yaw/pitch in game memory (scan while
-   turning with the pad file), hook the camera update (`src/runtime_hooks.c` style) and add the
-   mouse counts while the camera is free; stick emulation otherwise (lock-on, cutscenes, menus).
-   If it fails, step 1 stands.
+`src/runtime_mouse.c` validates all 16 bytes at image offset 0x143cde0, displaces the three AVX
+stick-speed instructions, then adds 0.0015 radians per scaled point to xmm1's pitch/yaw. The
+game retains its angle wrapping and pitch clamp; input-activity flags prevent recenter fighting
+the mouse. The detour preserves the red zone, flags, GPRs and all 16 full YMM registers. This
+site / activity fields follow bbport 0.6 and bloodborne-mac's documented native mouse hook.
+
+Totals are consumed once. Menus, the overlay, capture loss and stale updates discard motion
+instead of replaying it later. If the free-camera site has not run for 100 ms (lock-on,
+cinematics, debug camera), the pad path keeps the stick fallback for target switching; it uses
+the existing 16 ms window / 450 scaled points per second. Unsupported hook bytes or
+`BB_NATIVE_MOUSE=0` also keep the fallback. The game's Camera speed affects that fallback,
+not displacement-based free look.
+
+`test_mouse_host.cpp` exercises the production event handler, fast versus slow packetization,
+accelerated wheel events, focus loss and concurrent publication. `test_mouse_look.c` executes
+the actual x86 detour and checks distance invariance, no replay, stale/menu input, hook guards,
+flags / GPRs / upper YMM lanes. `test_pad.c` checks bounded wheel pulses and modifier latching.
 
 ## Controller buttons (2026-11-08, released in 0.5.15)
 

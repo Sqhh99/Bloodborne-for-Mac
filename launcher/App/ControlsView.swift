@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 Mark Hall
 // SPDX-License-Identifier: GPL-2.0-or-later
 import AppKit
+import Combine
 import Carbon.HIToolbox
 import GameController
 import SwiftUI
@@ -25,15 +26,22 @@ struct ControlsView: View {
                 Section(L("Mouse")) {
                     Toggle(L("Mouse camera"), isOn: $model.settings.mouseLook)
                         .help(L("Click in the game window to turn the camera with the mouse; \u{2318} gives the cursor back. Controllers always work."))
-                    NumberSlider(label: L("Sensitivity"), value: $model.settings.mouseSensitivity, range: 0.1...10, format: "%.1f",
-                                 help: L("How far the camera turns for a mouse movement."))
+                    NumberSlider(label: L("Sensitivity"), value: $model.settings.mouseSensitivity, range: 0.1...10, format: "%.2f",
+                                 help: L("How far the camera turns for a mouse movement."), logarithmic: true)
                     NumberSlider(label: L("Vertical speed"), value: $model.settings.mouseVertical, range: 0.25...4, format: "%.2f\u{00D7}",
                                  help: L("How fast the camera turns up and down, relative to left and right."))
                     Toggle(L("Invert vertical"), isOn: $model.settings.mouseInvertY)
-                    Text(L("Turning still too slow? Raise Camera speed in the game's own options too. Mouse buttons and the wheel reach the game while it holds the cursor. The in-game menu (\u{2318},) has these sliders too, live."))
+                    Button(L("Reset mouse sensitivity")) {
+                        model.settings.mouseSensitivity = GameSettings.defaultMouseSensitivity
+                        model.settings.mouseVertical = 1
+                        model.settings.mouseInvertY = false
+                    }
+                    Text(L("Free camera follows mouse distance. Adjust sensitivity here or live in the in-game menu (\u{2318},). Scroll up switches the right weapon; down switches quick items. 3 / Up adds blood bullets."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Section(L("Keyboard")) {
+                    Text(L("Movement keys also navigate game menus. Q goes back; V uses a blood vial. Separate dodge and run keys are optional."))
+                        .font(.caption).foregroundStyle(.secondary)
                     Toggle(L("Camera keys are the d-pad with the mouse camera"), isOn: $model.settings.cameraKeysDpad)
                         .disabled(!model.settings.mouseLook)
                         .help(L("While the mouse turns the camera, the camera keys (I, J, K and L by default) scroll menus and switch weapons and items instead."))
@@ -241,11 +249,18 @@ private struct NumberSlider: View {
     let range: ClosedRange<Double>
     let format: String
     let help: String
+    var logarithmic = false
 
     var body: some View {
         LabeledContent(label) {
             HStack {
-                Slider(value: $value, in: range)
+                if logarithmic {
+                    Slider(value: Binding(get: { log2(max(range.lowerBound, value)) },
+                                          set: { value = min(range.upperBound, max(range.lowerBound, pow(2, $0))) }),
+                           in: log2(range.lowerBound)...log2(range.upperBound))
+                } else {
+                    Slider(value: $value, in: range)
+                }
                 Text(String(format: format, value)).monospacedDigit().frame(width: 44, alignment: .trailing)
             }
         }

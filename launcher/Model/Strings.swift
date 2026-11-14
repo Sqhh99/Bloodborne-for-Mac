@@ -330,9 +330,9 @@ enum Strings {
         "Apple's Metal HUD: FPS, GPU time and frame pacing, top right":
             (ja: "Apple の Metal HUD：FPS、GPU 時間、フレームペーシングを右上に表示します",
              zh: "Apple 的 Metal HUD：在右上角显示 FPS、GPU 时间和帧节奏"),
-        "Free camera: hold Cross and press L3 (keyboard: F + Left Ctrl). Debug menu: left touchpad / G; needs DbgFont14h.ccm and DbgFont14h.tpf in dvdroot_ps4/font from Nexus mod #253.":
-            (ja: "フリーカメラ：✕ を押しながら L3（キーボード：F + 左 Ctrl）。デバッグメニュー：タッチパッド左 / G。Nexus の Mod #253 の DbgFont14h.ccm と DbgFont14h.tpf が dvdroot_ps4/font に必要です。",
-             zh: "自由视角：按住 ✕ 再按 L3（键盘：F + 左 Ctrl）。调试菜单：触摸板左侧 / G；需要把 Nexus 模组 #253 中的 DbgFont14h.ccm 和 DbgFont14h.tpf 放入 dvdroot_ps4/font。"),
+        "Free camera: hold Cross and press L3 (keyboard: E + X). Debug menu: left touchpad / G; needs DbgFont14h.ccm and DbgFont14h.tpf in dvdroot_ps4/font from Nexus mod #253.":
+            (ja: "フリーカメラ：✕ を押しながら L3（キーボード：E + X）。デバッグメニュー：タッチパッド左 / G。Nexus の Mod #253 の DbgFont14h.ccm と DbgFont14h.tpf が dvdroot_ps4/font に必要です。",
+             zh: "自由视角：按住 ✕ 再按 L3（键盘：E + X）。调试菜单：触摸板左侧 / G；需要把 Nexus 模组 #253 中的 DbgFont14h.ccm 和 DbgFont14h.tpf 放入 dvdroot_ps4/font。"),
         "Choose an upscaler on the General tab to adjust these options.":
             (ja: "これらのオプションを調整するには、「一般」タブでアップスケーラーを選択してください。",
              zh: "请先在“常规”页选择超分辨率方式，再调整这些选项。"),
@@ -385,9 +385,18 @@ enum Strings {
         "Sensitivity":
             (ja: "感度",
              zh: "灵敏度"),
+        "Reset mouse sensitivity":
+            (ja: "マウス感度をリセット",
+             zh: "恢复默认鼠标灵敏度"),
+        "Movement keys also navigate game menus. Q goes back; V uses a blood vial. Separate dodge and run keys are optional.":
+            (ja: "移動キーはゲームのメニュー操作にも使えます。Q で戻り、V で輸血液を使います。回避・ダッシュの個別キーは任意です。",
+             zh: "移动键也可用于游戏菜单导航。Q 返回，V 使用血瓶；可选配独立的闪避和冲刺键。"),
         "How far the camera turns for a mouse movement.":
             (ja: "マウスの動きに対してカメラがどれだけ回るかです。",
              zh: "鼠标移动时视角转动的幅度。"),
+        "Free camera follows mouse distance. Adjust sensitivity here or live in the in-game menu (⌘,). Scroll up switches the right weapon; down switches quick items. 3 / Up adds blood bullets.":
+            (ja: "自由視点はマウスの移動量に従います。感度はここかゲーム内メニュー（⌘,）で調整できます。ホイール上で右武器、下でアイテムを切り替え、3 / ↑ で水銀弾を補充します。",
+             zh: "自由视角按鼠标位移转动，可在此处或游戏内菜单（⌘,）实时调节。滚轮上切换右手武器，下切换快捷道具；3 / ↑ 消耗生命补充子弹。"),
         "Vertical speed":
             (ja: "上下の速さ",
              zh: "垂直速度"),
@@ -529,6 +538,12 @@ enum Strings {
         "Dodge (tap Circle)":
             (ja: "回避（○ を短く押す）",
              zh: "闪避（轻按 ○）"),
+        "Dodge, run, back (Circle)":
+            (ja: "回避・ダッシュ・戻る（○）",
+             zh: "闪避 / 冲刺 / 返回（○）"),
+        "Back in game menus":
+            (ja: "ゲームのメニューで戻る",
+             zh: "游戏菜单返回"),
         "Run (hold Circle)":
             (ja: "ダッシュ（○ を長押し）",
              zh: "奔跑（按住 ○）"),

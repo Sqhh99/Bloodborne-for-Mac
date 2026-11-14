@@ -68,6 +68,7 @@ namespace {
 std::mutex imgui_mutex; // the ImGui context: window thread (input) and present thread
 std::atomic<bool> initialized{false}; // read without the lock (Visible, Render)
 std::atomic<bool> menu_open{false};
+ImGuiKey menu_key_aliases[SDL_SCANCODE_COUNT]{};
 bool l3_down = false, r3_down = false;
 // A key or pad combo that toggled/closed the menu is still held: the game polls the keyboard
 // and pad state (runtime_pad.c), so it would see it right after the menu closes (Escape is
@@ -110,6 +111,8 @@ void SetOpen(bool value) {
         return;
     }
     ImGui::GetIO().MouseDrawCursor = value;
+    ImGui::GetIO().ClearInputKeys();
+    std::fill_n(menu_key_aliases, SDL_SCANCODE_COUNT, ImGuiKey_None);
     if (!value && dirty) {
         dirty = false;
         BbSettings::Save();
@@ -556,7 +559,7 @@ void Toggle(const char* label, std::atomic<bool>& value, int restart = -1) {
 
 /// Label on the left, slider filling the right side of the row.
 void SliderRow(const char* label, std::atomic<float>& value, float lo, float hi,
-               const char* info = nullptr) {
+               const char* info = nullptr, bool logarithmic = false) {
     RowStart();
     const float x0 = ImGui::GetCursorScreenPos().x;
     const float row_y = ImGui::GetCursorScreenPos().y;
@@ -572,16 +575,17 @@ void SliderRow(const char* label, std::atomic<float>& value, float lo, float hi,
     float v = value;
     char id[64];
     std::snprintf(id, sizeof(id), "##%s", label);
-    bool changed = ImGui::SliderFloat(id, &v, lo, hi, "%.2f");
+    bool changed = ImGui::SliderFloat(id, &v, lo, hi, "%.2f",
+                                      logarithmic ? ImGuiSliderFlags_Logarithmic : 0);
     // D-pad left/right step the focused slider: ImGui's own gamepad tweak needs Cross first and
     // moves 0.01 a press (200 presses across the sharpness range).
     if (ImGui::IsItemFocused() && !ImGui::IsItemActive()) {
         const float step = (hi - lo) / 40.0f;
-        if (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft)) {
-            v = std::max(lo, v - step);
+        if (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft) || ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
+            v = std::max(lo, logarithmic ? v / 1.1f : v - step);
             changed = true;
-        } else if (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight)) {
-            v = std::min(hi, v + step);
+        } else if (ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight) || ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
+            v = std::min(hi, logarithmic ? v * 1.1f : v + step);
             changed = true;
         }
     }
@@ -837,13 +841,18 @@ void DisplayTab(BbSettings::Values& s) {
 
     BeginCard("Mouse");
     Toggle("Mouse camera", s.mouse_look);
-    SliderRow("Sensitivity", s.mouse_sensitivity, 0.1f, 10.0f);
+    SliderRow("Sensitivity", s.mouse_sensitivity, 0.1f, 10.0f,
+              "Default 2.00. Mouse distance controls the free camera's turn, independent of swipe speed.", true);
     SliderRow("Vertical speed", s.mouse_vertical, 0.25f, 4.0f,
               "How fast the camera turns up and down, relative to left and right.");
     Toggle("Invert vertical", s.mouse_invert_y);
-    HintBelow("Click in the game window to use the mouse; Cmd gives the cursor back. Buttons and "
-              "keys: the launcher's Controls page. Turning still too slow? Raise Camera speed in "
-              "the game's own options.");
+    if (ImGui::Button("Reset mouse sensitivity")) {
+        Store(s.mouse_sensitivity, BbSettings::Values::DefaultMouseSensitivity, true);
+        Store(s.mouse_vertical, 1.0f, true);
+        Store(s.mouse_invert_y, false, true);
+    }
+    HintBelow("Click in the game window to use the mouse; Cmd gives the cursor back. Free camera "
+              "follows mouse distance. Scroll up: right weapon; down: quick item. Blood bullets: 3 / Up.");
     EndCard();
 
     BeginCard("Controller");
@@ -1477,8 +1486,43 @@ bool HandleEvent(const SDL_Event& event) {
         io.AddKeyEvent(ImGuiMod_Alt, (event.key.mod & SDL_KMOD_ALT) != 0);
         // Cmd: ImGui's macOS behaviours treat it as the shortcut modifier (Cmd+click, Cmd+A).
         io.AddKeyEvent(ImGuiMod_Super, (event.key.mod & SDL_KMOD_GUI) != 0);
-        if (const ImGuiKey key = KeyFromSdl(event.key.key); key != ImGuiKey_None) {
-            io.AddKeyEvent(key, down);
+        // WASD navigates this overlay too, but remains text while editing a numeric field.
+        // Track physical arrows and aliases together: releasing W must not release a held Up.
+        // Keep an alias until key-up even if the field's focus changes meanwhile.
+        bool navigation = false;
+        const auto scan = event.key.scancode;
+        if (scan > SDL_SCANCODE_UNKNOWN && scan < SDL_SCANCODE_COUNT) {
+            ImGuiKey& alias = menu_key_aliases[scan];
+            if (down && alias == ImGuiKey_None) {
+                switch (event.key.key) {
+                case SDLK_UP: alias = ImGuiKey_UpArrow; break;
+                case SDLK_DOWN: alias = ImGuiKey_DownArrow; break;
+                case SDLK_LEFT: alias = ImGuiKey_LeftArrow; break;
+                case SDLK_RIGHT: alias = ImGuiKey_RightArrow; break;
+                default:
+                    if (!io.WantTextInput && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
+                        switch (scan) {
+                        case SDL_SCANCODE_W: alias = ImGuiKey_UpArrow; break;
+                        case SDL_SCANCODE_S: alias = ImGuiKey_DownArrow; break;
+                        case SDL_SCANCODE_A: alias = ImGuiKey_LeftArrow; break;
+                        case SDL_SCANCODE_D: alias = ImGuiKey_RightArrow; break;
+                        default: break;
+                        }
+                    }
+                    break;
+                }
+            }
+            if (alias != ImGuiKey_None) {
+                const ImGuiKey key = alias;
+                if (!down) alias = ImGuiKey_None;
+                bool held = false;
+                for (ImGuiKey source : menu_key_aliases) held |= source == key;
+                io.AddKeyEvent(key, held);
+                navigation = true;
+            }
+        }
+        if (!navigation) {
+            if (const ImGuiKey key = KeyFromSdl(event.key.key); key != ImGuiKey_None) io.AddKeyEvent(key, down);
         }
         return true;
     }

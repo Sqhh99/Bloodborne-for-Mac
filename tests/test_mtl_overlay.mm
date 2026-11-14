@@ -20,6 +20,7 @@
 #include "bbport_overlay.h"
 #include "bbport_settings.h"
 #include "video_core/renderer_metal/mtl_device.h"
+#include "../gpu/third_party/imgui/imgui.h"
 
 namespace {
 
@@ -147,6 +148,50 @@ int main() {
         for (int i = 0; i < 4; ++i) {
             Present(t, true);
         }
+        // WASD is menu navigation, while text-entry fields and Mac shortcuts keep their keys.
+        for (const auto& mapping : std::vector<std::pair<SDL_Scancode, ImGuiKey>>{
+                 {SDL_SCANCODE_W, ImGuiKey_UpArrow}, {SDL_SCANCODE_S, ImGuiKey_DownArrow},
+                 {SDL_SCANCODE_A, ImGuiKey_LeftArrow}, {SDL_SCANCODE_D, ImGuiKey_RightArrow}}) {
+            SDL_Event e = Key(SDLK_W, SDL_KMOD_NONE, true);
+            e.key.scancode = mapping.first;
+            ImGui::GetIO().WantTextInput = false;
+            Expect(BbOverlay::HandleEvent(e), "WASD consumed by overlay");
+            Present(t, true);
+            Expect(ImGui::IsKeyDown(mapping.second), "WASD drives the matching arrow");
+            ImGui::GetIO().WantTextInput = true; // focus changes before key-up
+            e.type = SDL_EVENT_KEY_UP;
+            e.key.down = false;
+            BbOverlay::HandleEvent(e);
+            Present(t, true);
+            Expect(!ImGui::IsKeyDown(mapping.second), "WASD alias released after focus change");
+        }
+        SDL_Event typing = Key(SDLK_W, SDL_KMOD_NONE, true);
+        typing.key.scancode = SDL_SCANCODE_W;
+        ImGui::GetIO().WantTextInput = true;
+        BbOverlay::HandleEvent(typing);
+        Present(t, true);
+        Expect(!ImGui::IsKeyDown(ImGuiKey_UpArrow), "typing W does not navigate");
+        typing.type = SDL_EVENT_KEY_UP;
+        typing.key.down = false;
+        BbOverlay::HandleEvent(typing);
+        ImGui::GetIO().WantTextInput = false;
+        SDL_Event arrow = Key(SDLK_UP, SDL_KMOD_NONE, true);
+        arrow.key.scancode = SDL_SCANCODE_UP;
+        typing.type = SDL_EVENT_KEY_DOWN;
+        typing.key.down = true;
+        BbOverlay::HandleEvent(arrow);
+        BbOverlay::HandleEvent(typing);
+        Present(t, true);
+        typing.type = SDL_EVENT_KEY_UP;
+        typing.key.down = false;
+        BbOverlay::HandleEvent(typing);
+        Present(t, true);
+        Expect(ImGui::IsKeyDown(ImGuiKey_UpArrow), "releasing W preserves a held physical Up");
+        arrow.type = SDL_EVENT_KEY_UP;
+        arrow.key.down = false;
+        BbOverlay::HandleEvent(arrow);
+        Present(t, true);
+        Expect(!ImGui::IsKeyDown(ImGuiKey_UpArrow), "last navigation source released");
         Expect(Changed(t, Width / 2 - 100, Height / 2 - 100, Width / 2 + 100, Height / 2 + 100) >
                    0.9,
                "menu drawn over the middle");

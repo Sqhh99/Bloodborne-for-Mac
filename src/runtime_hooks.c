@@ -129,6 +129,8 @@ static int changes_bytes(uint64_t offset, const unsigned char *data, size_t size
 
 const char *runtime_patch_conflict(uint64_t offset, const unsigned char *data, size_t size) {
     if (size>UINT64_MAX-offset) return "overflowing patch range";
+    const char *mouse=runtime_mouse_patch_conflict(offset,data,size);
+    if (mouse) return mouse;
     /* REA: replacing this CALL with RET leaves the function's saved stack in
        place. The original timed-wait call is required in every timing mode. */
     static const unsigned char timed_call[]={0xe8,0xa2,0xce,0xb3,0x00};
