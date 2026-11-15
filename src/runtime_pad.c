@@ -9,8 +9,8 @@
  * Optional separate dodge / sprint bindings and custom controller mappings are still supported.
  * Controller buttons: bbport.ini bind_pad_ keys (remap_buttons).
  * Mouse (split mode, after a click in the window): the camera (right stick); by default left
- * button R1, Shift + left R2, right L2, middle R3, side buttons R2 (back) and L1 (forward), the
- * wheel the d-pad's up and down. */
+ * button R1, Shift + left R2, right L2, middle R3, side buttons R2 (back) and L1 (forward),
+ * Shift + wheel up / down the d-pad's right (weapon) and down (quick item). */
 #define _GNU_SOURCE
 #include "runtime.h"
 #include "gpu/bbgpu.h"

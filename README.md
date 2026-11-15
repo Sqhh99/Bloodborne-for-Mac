@@ -42,7 +42,7 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   | Lock on (R3) | Q or middle click |
   | Interact, confirm (Cross) | E, Return |
   | Quick item (Square) / Blood Vial (Triangle) | R or Tab / V |
-  | Switch weapons, quick items (d-pad) | 1 / ← left hand, 2 / → / wheel up right hand, 4 / ↓ / wheel down quick item; ⇧ + wheel down left hand |
+  | Switch weapons, quick items (d-pad) | 1 / ← left hand, 2 / → / ⇧ + wheel up right hand, 4 / ↓ / ⇧ + wheel down quick item |
   | Blood bullets (costs health) | 3 / ↑; deliberately not on the wheel |
   | Menu (Options) / gestures (touchpad) | Esc / G (right side: Delete ⌫) |
   | L3 | X |

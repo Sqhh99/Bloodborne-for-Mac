@@ -74,6 +74,19 @@ constexpr u64 PreciseStickyNs = 1'000'000'000;
 float menu_wheel = 0.0f; // precise travel since the last item
 u64 precise_until_ns = 0, precise_item_ns = 0;
 
+// The wheel's up (+) and down (-) in the direction it turned, whatever "natural scrolling" says.
+// macOS turns a wheel mouse's scrolling sideways while Shift is held (its deltaY arrives as
+// deltaX, which SDL negates, SDL_cocoamouse.m): Shift + wheel, bound to the weapon and item
+// switches, came with y = 0 and did nothing. A sideways scroll without Shift stays ignored.
+float WheelDelta(const SDL_MouseWheelEvent& wheel, bool shift) {
+    const float y = wheel.y == 0.0f && shift ? -wheel.x : wheel.y;
+    return wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -y : y;
+}
+
+bool ShiftHeld() {
+    return (SDL_GetModState() & SDL_KMOD_SHIFT) != 0;
+}
+
 void MenuWheel(BbGpuShared* s, float delta) {
     const u64 now = MonotonicNs();
     if (delta == 0.0f) {
@@ -194,7 +207,7 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
             }
             return true;
         case SDL_EVENT_MOUSE_WHEEL: {
-            const float delta = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
+            const float delta = WheelDelta(event.wheel, ShiftHeld());
             if (std::isfinite(delta)) MenuWheel(s, delta);
             return true;
         }
@@ -251,8 +264,8 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
         if (!captured) {
             return false;
         }
-        // Whole steps in the direction the wheel turned, whatever "natural scrolling" says.
-        const float delta = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y;
+        // Whole steps in the direction the wheel turned (WheelDelta: Shift + wheel too).
+        const float delta = WheelDelta(event.wheel, ShiftHeld());
         if (!std::isfinite(delta)) return true;
         if (delta * wheel < 0) wheel = 0; // reversing cannot inherit a fraction of the old direction
         wheel += delta;
