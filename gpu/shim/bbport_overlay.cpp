@@ -844,7 +844,8 @@ void DisplayTab(BbSettings::Values& s) {
         Store(s.mouse_invert_y, false, true);
     }
     HintBelow("Click in the game window to use the mouse; Cmd gives the cursor back. Free camera "
-              "follows mouse distance. Scroll up: right weapon; down: quick item. Blood bullets: 3 / Up.");
+              "follows mouse distance. Scroll up/down: previous/next item. Shift + scroll: right/left weapon. "
+              "Blood bullets: 3 / Up.");
     EndCard();
 
     BeginCard("Controller");

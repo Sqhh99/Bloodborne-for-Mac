@@ -112,10 +112,10 @@ static void test_bindings(void) {
     assert(runtime_bindings_held(keys,0)==0);
     assert(runtime_bindings_held(keys,SDL_BUTTON_RMASK)==(UINT64_C(1)<<BIND_L2));
     assert(runtime_bindings_held(keys,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_RIGHT));
-    assert(runtime_bindings_held(keys,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_DOWN));
-    /* The wheel alone switches nothing (a hand reaching for the middle button turns it). */
-    assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==0);
-    assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==0);
+    assert(runtime_bindings_held(keys,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_LEFT));
+    /* Without Shift: previous / next item. With Shift: only the weapon, never an item too. */
+    assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_ITEM_PREVIOUS));
+    assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_DOWN));
     assert(runtime_bindings_held(NULL,SDL_BUTTON_MMASK)==(UINT64_C(1)<<BIND_R3));
     assert(runtime_bindings_use_wheel());
 
@@ -134,7 +134,7 @@ static void test_bindings(void) {
     (void)PRESS(SDL_SCANCODE_UNKNOWN);
     write_file(path,"# comment\r\nupscaler=metalfx\r\nbind_cross = K , Mouse Left\r\nbind_dpad_down=\r\nbind_dpad_up=3\r\n"
                     "bind_square=Left GUI,Bogus,y,Left GUI+H,Bogus+H\r\nbind_r1=Wheel Up\r\nbind_walk=CapsLock\r\ncamera_keys_dpad=1\r\n"
-                    "bind_circle=Left Ctrl + Keypad +, Z\r\nbind_r2=Left Alt+F\r\nbind_l2=F\r\nbind_l1=E\r\nbind_dpad_right=2,Right\r\n");
+                    "bind_circle=Left Ctrl + Keypad +, Z\r\nbind_r2=Left Alt+F\r\nbind_l2=F\r\nbind_l1=E\r\nbind_dpad_right=2,Right\r\nbind_item_previous=\r\n");
     runtime_bindings_load(path);
     d=PRESS(SDL_SCANCODE_K);
     assert(d.buttons==BTN_CROSS && d.right_y==255); /* K is Cross now, and still the camera's down */
@@ -164,7 +164,7 @@ static void test_bindings(void) {
     assert(runtime_bindings_held(NULL,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_R1));
     assert(runtime_bindings_held(NULL,BIND_WHEEL_DOWN_MASK)==0);
     assert(runtime_bindings_use_wheel());
-    write_file(path,"bind_dpad_up=3\nbind_dpad_down=4\nbind_dpad_left=Left\nbind_dpad_right=Right\n");
+    write_file(path,"bind_dpad_up=3\nbind_dpad_down=4\nbind_dpad_left=Left\nbind_dpad_right=Right\nbind_item_previous=\n");
     runtime_bindings_load(path);
     assert(!runtime_bindings_use_wheel());
     unlink(path);
@@ -183,8 +183,8 @@ static void test_bindings(void) {
     /* The d-pad's prompts show in menus: an arrow key, not the digit or the wheel. */
     assert(runtime_bindings_prompt(BIND_DPAD_UP,0,label,sizeof label)=='K' && !strcmp(label,"\xe2\x86\x91"));
     assert(runtime_bindings_prompt(BIND_DPAD_DOWN,0,label,sizeof label)=='K' && !strcmp(label,"\xe2\x86\x93"));
-    /* With the hand on the mouse too: the plain wheel scrolls menus, a Shift+Wheel prompt would mislead. */
-    assert(runtime_bindings_prompt(BIND_DPAD_DOWN,1,label,sizeof label)=='K' && !strcmp(label,"\xe2\x86\x93"));
+    /* The plain wheel scrolls menus too; Shift+Wheel still falls back to an arrow prompt. */
+    assert(runtime_bindings_prompt(BIND_DPAD_DOWN,1,label,sizeof label)=='M' && !strcmp(label,"Wheel Down"));
     assert(runtime_bindings_prompt(BIND_DPAD_RIGHT,1,label,sizeof label)=='K' && !strcmp(label,"\xe2\x86\x92"));
     assert(!runtime_bindings_prompt(BIND_DODGE,1,label,sizeof label) && !label[0]); /* unbound */
     write_file(path,"bind_r2=Left Shift+Mouse Left\nbind_triangle=Left Ctrl+V\nbind_cross=Keypad +\n");
@@ -376,14 +376,14 @@ static void test_wheel_pulses(void) {
     assert(pulse.started && pulse.direction==-1 && pulse.press_until==now+35000);
     bool shift[512]={0}; shift[SDL_SCANCODE_LSHIFT]=true;
     pulse.actions=runtime_bindings_wheel_actions(shift,BIND_WHEEL_DOWN_MASK);
-    assert(pulse.actions==(UINT64_C(1)<<BIND_DPAD_DOWN));
+    assert(pulse.actions==(UINT64_C(1)<<BIND_DPAD_LEFT));
     shift[SDL_SCANCODE_LSHIFT]=false;
     for (int i=1;i<=10;++i) {
         now=1000000+(uint64_t)i*2000;
         input.wheel_serial+=500; input.wheel_ns=now*1000;
         wheel_pulse(&pulse,&input,now,1);
         assert(!pulse.started && pulse.direction==-1 && pulse.press_until==1035000);
-        assert(pulse.actions==(UINT64_C(1)<<BIND_DPAD_DOWN)); /* modifier is latched */
+        assert(pulse.actions==(UINT64_C(1)<<BIND_DPAD_LEFT)); /* modifier is latched */
     }
     wheel_pulse(&pulse,&input,1040000,1);
     assert(!pulse.direction && !pulse.actions);
@@ -399,9 +399,11 @@ static void test_wheel_pulses(void) {
     wheel_pulse(&pulse,&input,2004000,1); assert(!pulse.direction); /* stale event */
     ++input.epoch; input.wheel_ns=2005000*UINT64_C(1000);
     wheel_pulse(&pulse,&input,2005000,1); assert(!pulse.direction);
-    assert(!runtime_bindings_wheel_actions(shift,BIND_WHEEL_UP_MASK)); /* Shift released */
+    assert(runtime_bindings_wheel_actions(shift,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_ITEM_PREVIOUS));
+    assert(runtime_bindings_wheel_actions(shift,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_DOWN));
     shift[SDL_SCANCODE_LSHIFT]=true;
     assert(runtime_bindings_wheel_actions(shift,BIND_WHEEL_UP_MASK)==(UINT64_C(1)<<BIND_DPAD_RIGHT));
+    assert(runtime_bindings_wheel_actions(shift,BIND_WHEEL_DOWN_MASK)==(UINT64_C(1)<<BIND_DPAD_LEFT));
     assert(!(runtime_bindings_wheel_actions(shift,BIND_WHEEL_UP_MASK)&(UINT64_C(1)<<BIND_DPAD_UP)));
 }
 

@@ -259,7 +259,9 @@ saves and settings as the Finder launcher.
   **Mouse camera**). The keyboard's defaults are Dark Souls III's PC layout (the table under
   "What this fork changes" in the [README](../README.md)). The launcher's **Controls** page rebinds keys, mouse buttons and the
   wheel (up to four per action, chords such as ⇧ + click) and sets the mouse speed; changes apply
-  at the next start.
+  at the next start. Scroll up selects the previous equipped quick item; scroll down selects
+  the next, wrapping around and skipping empty slots. Shift + scroll up/down switches the
+  right/left weapon. The **Previous quick item** action can also be rebound in Controls.
 - **First launch and new areas** compile shaders, so the first minutes stutter a little; later
   sessions load them from the cache at start. The first launch after a rebuild takes ~20 s to
   open the window.

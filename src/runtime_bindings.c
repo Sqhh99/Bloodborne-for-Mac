@@ -23,8 +23,7 @@ static const struct { const char *name; uint16_t input; } mouse_names[]={
  * button (tap to dodge, hold to run), E interacts, Q locks on / goes back in menus, F transforms.
  * V uses a blood vial so R remains the quick item. Right click also fires: Bloodborne has no
  * universal shield action. Optional separate dodge/run bindings remain available. The wheel
- * changes weapon (up) and quick item (down) only with Shift held: on its own, a wheel turned by
- * a hand reaching for the middle button (lock-on) switched them by accident. */
+ * selects the previous / next quick item; Shift + wheel switches the right / left weapon. */
 static const struct { const char *key, *defaults; } actions[BIND_COUNT]={
     [BIND_MOVE_FORWARD]={"bind_move_forward","W"}, [BIND_MOVE_BACK]={"bind_move_back","S"},
     [BIND_MOVE_LEFT]={"bind_move_left","A"}, [BIND_MOVE_RIGHT]={"bind_move_right","D"},
@@ -37,11 +36,12 @@ static const struct { const char *key, *defaults; } actions[BIND_COUNT]={
     [BIND_R1]={"bind_r1","Mouse Left"}, [BIND_R2]={"bind_r2","Left Shift+Mouse Left,Mouse Back"},
     [BIND_L1]={"bind_l1","F,Mouse Forward"}, [BIND_L2]={"bind_l2","Left Ctrl,Left Shift+Mouse Right,Mouse Right"},
     [BIND_R3]={"bind_r3","Q,Mouse Middle"}, [BIND_L3]={"bind_l3","X"},
-    [BIND_DPAD_UP]={"bind_dpad_up","3,Up"}, [BIND_DPAD_DOWN]={"bind_dpad_down","4,Down,Left Shift+Wheel Down"},
-    [BIND_DPAD_LEFT]={"bind_dpad_left","1,Left"}, [BIND_DPAD_RIGHT]={"bind_dpad_right","2,Right,Left Shift+Wheel Up"},
+    [BIND_DPAD_UP]={"bind_dpad_up","3,Up"}, [BIND_DPAD_DOWN]={"bind_dpad_down","4,Down,Wheel Down"},
+    [BIND_DPAD_LEFT]={"bind_dpad_left","1,Left,Left Shift+Wheel Down"}, [BIND_DPAD_RIGHT]={"bind_dpad_right","2,Right,Left Shift+Wheel Up"},
     [BIND_OPTIONS]={"bind_options","Escape"},
     [BIND_TOUCH_LEFT]={"bind_touch_left","G"}, [BIND_TOUCH_RIGHT]={"bind_touch_right","Backspace"},
     [BIND_MENU_BACK]={"bind_menu_back","Q"},
+    [BIND_ITEM_PREVIOUS]={"bind_item_previous","Wheel Up"},
 };
 
 static const char *const pad_names[PAD_BUTTON_COUNT]={

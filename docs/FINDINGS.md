@@ -2661,3 +2661,19 @@ deltas into up to 3 items per event and queued up to 6. Now one notch = one item
 delta, a queue of 2 dropped after 150 ms, trackpads one item per 60 points and 120 ms apart.
 `BB_MENU_POINTER_LOG=1` prints each wheel event's delta in the host for the next check.
 
+## 2026-11-15: reverse quick-item selection (fork)
+
+Owner chose plain wheel up = previous quick item, down = next, Shift + wheel up/down =
+right/left weapon. Bloodborne exposes only next-item selection on the pad. The new
+`runtime_quick_items.c` selects the previous equipped inventory index on the main-thread
+Flipper tick, then invokes the native EquipGameData normaliser. Six quick-slot records and
+the selected-index field were checked against the 1.09 normaliser's disassembly.
+
+Verified with x86-64 fixtures under Rosetta: backwards order, wraparound, empty slots, one
+item, invalid selection, one action per held edge, menu/overlay cancellation, blocked input,
+stale requests and a missing local player. Pad tests cover the defaults and Shift suppression;
+the patch guard covers the new independent observer. The runtime and native launcher build.
+An isolated app using a save copy loaded into the world and logged the verified
+`0x2034770` quick-item hook as installed; the real save was not used for automated testing.
+The owner subsequently tested the updated local app and confirmed no issues on 2026-11-15.
+

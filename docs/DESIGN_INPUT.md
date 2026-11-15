@@ -26,10 +26,9 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   compatibility: WASD move, IJKL camera, Space Circle (tap dodge / hold sprint / release and
   repress while sprinting to jump), Left Alt walk, E / Return Cross, V Triangle, R / Tab Square,
   F L1, Q / middle click R3, X L3, Escape Options, G / Backspace touchpad left / right. The d-pad
-  uses 1 2 3 4 and arrows. Shift + wheel up changes the right weapon, Shift + wheel down the quick
-  item (2026-11-14: the plain wheel switched them by accident when reaching for the middle-click
-  lock-on); the left weapon is 1 / Left only. In the game's menus the plain wheel still scrolls
-  (menu pointer). Blood bullets remain 3 / Up, off the wheel to avoid health loss.
+  uses 1 2 3 4 and arrows. Shift + wheel up/down changes the right/left weapon. The plain wheel
+  selects the previous/next quick item (2026-11-15, owner choice). In the game's menus the plain
+  wheel still scrolls (menu pointer). Blood bullets remain 3 / Up, off the wheel to avoid health loss.
   Mouse left R1, Shift + left / back R2, Ctrl / right / Shift + right L2, forward L1. V keeps
   vials separate from Q lock-on and R quick items; F transforms instead of changing the grip.
   An ini with its own `bind_` lines keeps them; only absent keys get the new defaults.
@@ -66,6 +65,15 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   is one gesture. The latest event starts a 35 ms press / 35 ms release; extra same-direction
   steps during that interval are consumed, never queued or replayed. Reversing cancels the old
   direction. Each pulse latches its bound actions, so releasing Shift cannot change its meaning.
+- **Previous quick item:** `bind_item_previous` (Wheel Up) is a separate action because the game
+  exposes only next-item selection on its pad. `runtime_quick_items.c` queues an input edge;
+  the main-thread Flipper update (1.09 offset `0x2034770`, verified prologue) consumes it. It walks
+  the six native quick slots backwards, skips empty slots, wraps, writes only the selected
+  inventory index, then calls the native EquipGameData normaliser (`0x14cf920`, signature
+  checked). It leaves equipped-slot order and inventory contents alone. Menus, blocked input,
+  missing local player and requests older than 150 ms discard the action. Fixture tests cover
+  selection, wraparound, gaps, holds and cancellation. The owner confirmed gameplay testing
+  passed on 2026-11-15.
 - Mouse buttons and the wheel reach the game only while the window holds the cursor (Mouse
   camera on, after a click), as before.
 - **Launcher:** third page "Controls" (the page switcher is not a TabView, #47): Mouse

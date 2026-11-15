@@ -100,8 +100,10 @@ fi
 touch out/.built
 if [[ ${1:-} == --test ]]; then
     python3 tests/test_launcher_stop.py
-    "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_pad.c src/runtime_bindings.c src/runtime_mouse.c src/runtime_menu_pointer.c src/runtime_host.c "${libraries[@]}" -Wl,-rpath,"$PREFIX/lib" -o out/pad-test
+    "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_pad.c src/runtime_bindings.c src/runtime_mouse.c src/runtime_menu_pointer.c src/runtime_quick_items.c src/runtime_host.c "${libraries[@]}" -Wl,-rpath,"$PREFIX/lib" -o out/pad-test
     out/pad-test
+    "$CC" "${cflags[@]}" -I. -Isrc tests/test_quick_items.c src/runtime_host.c -o out/quick-items-test
+    out/quick-items-test
     "$CC" "${cflags[@]}" -I. -Isrc tests/test_mouse_look.c -o out/mouse-look-test
     out/mouse-look-test
     /usr/bin/clang++ "${ARCH[@]}" -std=c++20 -O2 -g -Wall -Wextra -Werror -pthread \

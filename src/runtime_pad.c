@@ -10,7 +10,7 @@
  * Controller buttons: bbport.ini bind_pad_ keys (remap_buttons).
  * Mouse (split mode, after a click in the window): the camera (right stick); by default left
  * button R1, Shift + left R2, right L2, middle R3, side buttons R2 (back) and L1 (forward),
- * Shift + wheel up / down the d-pad's right (weapon) and down (quick item). */
+ * Shift + wheel up / down switches the right / left weapon; the plain wheel selects quick items. */
 #define _GNU_SOURCE
 #include "runtime.h"
 #include "gpu/bbgpu.h"
@@ -322,7 +322,7 @@ static void sample_devices(PadData *d) {
     d->connected=1; d->connected_count=connected_count ? connected_count : 1;
     d->timestamp=now_us();
     SDL_Gamepad *g=current_gamepad();
-    if (bbgpu_overlay_captures_input()) return; /* settings menu open: neutral input */
+    if (bbgpu_overlay_captures_input()) { runtime_quick_items_input(0,0); return; } /* neutral input */
     const bool *k=bbgpu_split_keyboard(); /* the window is in the GPU host (split) */
     if (!k) k=SDL_WasInit(SDL_INIT_VIDEO) ? SDL_GetKeyboardState(NULL) : NULL;
     if (g) {
@@ -368,12 +368,13 @@ static void sample_devices(PadData *d) {
     if (k && (k[SDL_SCANCODE_LGUI] || k[SDL_SCANCODE_RGUI])) k=NULL;
     uint64_t wheel_actions=0;
     const uint32_t mouse=mouse_inputs(k,&wheel_actions);
-    if (!k && !mouse && !wheel_actions) { dodge_was_down=0; prompt_note(g,pad_active,mouse_moving()); return; }
+    if (!k && !mouse && !wheel_actions) { runtime_quick_items_input(0,0); dodge_was_down=0; prompt_note(g,pad_active,mouse_moving()); return; }
     const uint64_t held=runtime_bindings_held(k,mouse)|wheel_actions;
     prompt_note(g,pad_active,held!=0 || mouse_moving());
     const int menu=game_menu_active();
     const int choice=menu && runtime_menu_pointer_choice(); /* the title before its list: not yet */
 #define HELD(a) ((held>>(a))&1)
+    runtime_quick_items_input(HELD(BIND_ITEM_PREVIOUS),!menu);
     /* A menu opened by Esc must not close again while that same Esc is held. Q consumed as
      * Back must not turn into lock-on if the menu disappears before the key is released. */
     static int options_latched,back_consumed;

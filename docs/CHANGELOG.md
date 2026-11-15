@@ -16,8 +16,9 @@ What each release of the macOS port changed, newest first. Moved here from the R
   swipe speed. The native camera path removes stick acceleration / dead zones / maximum turn
   speed and consumes each movement only once. Menus and focus changes discard stale turns.
 - Scroll bursts no longer build a queue that keeps changing items after scrolling stops.
-  Wheel up switches the right weapon, down the quick item; blood bullets remain 3 / Up so
-  scrolling cannot accidentally spend health. Shift + wheel actions stay latched until release.
+  Wheel up selects the previous quick item and down the next; Shift + wheel up/down switches
+  the right/left weapon. Blood bullets remain 3 / Up so scrolling cannot accidentally spend
+  health. Shift + wheel actions stay latched until release.
 - **The mouse points and clicks in the game's own menus** (title, inventory, shops, options):
   the item under the pointer gets the game's cursor, a click confirms it (or presses the
   slider's arrow or the side of the option it is on), the right button goes back, the wheel
