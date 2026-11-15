@@ -106,13 +106,6 @@ final class LauncherModel: ObservableObject {
             : Upscaler.launcherChoices + [settings.upscaler]
     }
     var canPlay: Bool { !running && !checkingGame && config.gameDir != nil && gameProblem == nil }
-    /// Straight into the game (no window): the toggle is off and a game folder is known.
-    var canSkipWindow: Bool {
-        !config.showLauncher && config.gameDir.map {
-            FileManager.default.fileExists(atPath: $0.appendingPathComponent("eboot.bin").path)
-        } == true
-    }
-
     /// Reads launch.conf and bbport.ini (again after each game session: the in-game menu may
     /// have changed bbport.ini).
     func load() {
@@ -461,8 +454,7 @@ final class LauncherModel: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
-    /// One check a day, silent unless it finds an update: when the launcher window shows, or as
-    /// the game starts when the window is turned off (main.swift shows the result after the game).
+    /// One check a day, silent unless it finds an update, when the launcher window shows.
     func checkForUpdatesIfDue() {
         guard config.checkUpdates == true, !running, Updates.isDue(last: config.lastUpdateCheck, now: Date()) else { return }
         config.lastUpdateCheck = Date()
@@ -471,7 +463,7 @@ final class LauncherModel: ObservableObject {
     }
 
     /// Automatic checks are off until the player agrees: asked once, at the first start with the
-    /// updater, before the launcher window or the game (also when the window is turned off).
+    /// updater, before the launcher window opens.
     func askAboutUpdatesIfNeeded() {
         guard config.checkUpdates == nil else { return }
         let alert = NSAlert()

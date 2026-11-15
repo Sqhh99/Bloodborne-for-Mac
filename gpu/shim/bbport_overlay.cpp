@@ -831,17 +831,6 @@ void DisplayTab(BbSettings::Values& s) {
     Toggle("FPS counter in corner", s.show_fps);
     EndCard();
 
-    // Started by the launcher: its "show every time" switch, which is hard to find again once off.
-    if (const int shown = BbSettings::ShowLauncher(); shown >= 0) {
-        BeginCard("Launcher");
-        bool v = shown != 0;
-        if (ToggleRow("Show the launcher when Bloodborne opens", &v)) {
-            BbSettings::SetShowLauncher(v);
-        }
-        HintBelow("Holding \xE2\x8C\xA5 Option while opening Bloodborne shows it once.");
-        EndCard();
-    }
-
     BeginCard("Mouse");
     Toggle("Mouse camera", s.mouse_look);
     SliderRow("Sensitivity", s.mouse_sensitivity, 0.1f, 10.0f,

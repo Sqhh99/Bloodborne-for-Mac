@@ -34,7 +34,7 @@ enum Shell {
 }
 
 /// launch.conf: the launcher's own settings as shell assignments (bash sources the file in
-/// Bloodborne.command): BB_GAME_DIR, BB_SAVE_DIR (absent: the default), BB_SHOW_LAUNCHER,
+/// Bloodborne.command): BB_GAME_DIR, BB_SAVE_DIR (absent: the default),
 /// BB_HIDE_LAUNCHER (1: the window hides while the game runs and comes back when it ends),
 /// BB_LANGUAGE (the launcher's language: en, ja or zh; absent: the system's), and the
 /// update check's BB_CHECK_UPDATES (absent: not asked yet), BB_UPDATE_TEST_BUILDS, BB_UPDATE_SKIP (a version the player
@@ -43,7 +43,6 @@ enum Shell {
 struct LaunchConfig: Equatable {
     var gameDir: URL?
     var saveDir: URL?
-    var showLauncher = true
     /// The window hides while the game runs (its settings are locked then) and comes back after.
     var hideWhilePlaying = false
     /// The launcher's language; nil follows the system (Language.preferred).
@@ -57,6 +56,7 @@ struct LaunchConfig: Equatable {
     /// Other BB_* / MTL_* / MVK_* assignments (diagnostics such as BB_FRAME_STATS=1): passed on to
     /// the game; a variable already set in the environment wins (#69).
     private(set) var extraEnvironment: [String: String] = [:]
+    // BB_SHOW_LAUNCHER is retired: ignore old values instead of forwarding them to the game.
     static let ownKeys: Set<String> = ["BB_GAME_DIR", "BB_SAVE_DIR", "BB_SHOW_LAUNCHER", "BB_HIDE_LAUNCHER", "BB_CHECK_UPDATES",
                                        "BB_UPDATE_TEST_BUILDS", "BB_UPDATE_SKIP", "BB_UPDATE_CHECKED",
                                        "BB_LAUNCH_CONF", "BB_LANGUAGE"]
@@ -71,7 +71,6 @@ struct LaunchConfig: Equatable {
         gameDir = path("BB_GAME_DIR")
         saveDir = path("BB_SAVE_DIR")
         dataDir = path("BB_DATA_DIR")
-        if let v = ini["BB_SHOW_LAUNCHER"] { showLauncher = Shell.unquote(v) != "0" }
         if let v = ini["BB_HIDE_LAUNCHER"] { hideWhilePlaying = Shell.unquote(v) == "1" }
         language = ini["BB_LANGUAGE"].flatMap { Language(rawValue: Shell.unquote($0)) }
         if let v = ini["BB_CHECK_UPDATES"] { checkUpdates = Shell.unquote(v) != "0" }
@@ -94,7 +93,7 @@ struct LaunchConfig: Equatable {
     func apply(to ini: inout IniFile) {
         ini["BB_GAME_DIR"] = gameDir.map { Shell.quote($0.path) }
         ini["BB_SAVE_DIR"] = saveDir.map { Shell.quote($0.path) }
-        ini["BB_SHOW_LAUNCHER"] = showLauncher ? "1" : "0"
+        ini["BB_SHOW_LAUNCHER"] = nil
         ini["BB_HIDE_LAUNCHER"] = hideWhilePlaying ? "1" : nil
         ini["BB_LANGUAGE"] = language?.rawValue
         ini["BB_CHECK_UPDATES"] = checkUpdates.map { $0 ? "1" : "0" }

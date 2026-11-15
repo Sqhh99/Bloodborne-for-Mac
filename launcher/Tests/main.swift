@@ -264,11 +264,10 @@ do {
 
     var conf = IniFile(text: "BB_GAME_DIR=/Users/a/My\\ Games/CUSA03173\nBB_DATA_DIR=/tmp/data\nBB_FPS=uncap\n")
     var config = LaunchConfig(ini: conf)
-    check(config.gameDir?.path == "/Users/a/My Games/CUSA03173" && config.saveDir == nil && config.showLauncher, "read launch.conf")
+    check(config.gameDir?.path == "/Users/a/My Games/CUSA03173" && config.saveDir == nil, "read launch.conf")
     check(config.dataDir?.path == "/tmp/data", "data folder from launch.conf")
     config.saveDir = URL(fileURLWithPath: tricky[1])
     config.gameDir = URL(fileURLWithPath: tricky[2])
-    config.showLauncher = false
     check(!config.hideWhilePlaying, "launcher stays shown while playing by default")
     config.hideWhilePlaying = true
     config.apply(to: &conf)
@@ -280,17 +279,27 @@ do {
     try? conf.write(to: url)
     let bash = Process()
     bash.executableURL = URL(fileURLWithPath: "/bin/bash")
-    bash.arguments = ["-c", "source \"$1\" && printf '%s\\n%s\\n%s' \"$BB_GAME_DIR\" \"$BB_SAVE_DIR\" \"$BB_SHOW_LAUNCHER\"", "_", url.path]
+    bash.arguments = ["-c", "source \"$1\" && printf '%s\\n%s\\n%s' \"$BB_GAME_DIR\" \"$BB_SAVE_DIR\" \"$BB_HIDE_LAUNCHER\"", "_", url.path]
     let pipe = Pipe()
     bash.standardOutput = pipe
     try? bash.run()
     bash.waitUntilExit()
     let sourced = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-    check(bash.terminationStatus == 0 && sourced == "\(tricky[2])\n\(tricky[1])\n0", "bash sources launch.conf: \(sourced.debugDescription)")
+    check(bash.terminationStatus == 0 && sourced == "\(tricky[2])\n\(tricky[1])\n1", "bash sources launch.conf: \(sourced.debugDescription)")
     try? FileManager.default.removeItem(at: url)
     config.saveDir = nil
     config.apply(to: &conf)
     check(conf["BB_SAVE_DIR"] == nil, "default save folder: no key")
+
+    for value in ["0", "1"] {
+        var legacy = IniFile(text: "BB_SHOW_LAUNCHER='\(value)'\nBB_HIDE_LAUNCHER=1\nBB_FPS=60\n# keep this comment\n")
+        let migrated = LaunchConfig(ini: legacy)
+        check(migrated.extraEnvironment["BB_SHOW_LAUNCHER"] == nil, "retired launcher setting not passed to the game")
+        migrated.apply(to: &legacy)
+        check(legacy["BB_SHOW_LAUNCHER"] == nil, "retired launcher setting removed on save")
+        check(migrated.hideWhilePlaying && legacy["BB_HIDE_LAUNCHER"] == "1" && legacy["BB_FPS"] == "60"
+              && legacy.text.contains("# keep this comment"), "other settings survive launcher migration")
+    }
 }
 
 // SaveFolder (review focus 4).
@@ -349,7 +358,6 @@ do {
     let p = packaged!.launchPlan(gameDir: game, saveDir: nil, dataDir: defaultData, env: env)
     check(p.executable.path == "/bin/bash" && p.arguments == [port.appendingPathComponent("run.sh").path], "packaged runs its run.sh")
     check(p.environment["BB_GAME_DIR"] == game.path && p.environment["BB_DATA_DIR"] == defaultData.path, "game and data folder")
-    check(p.environment["BB_LAUNCH_CONF"] == packaged!.launchConfURL(env: env).path, "launch.conf for the in-game menu")
     check(p.environment["BB_PREBUILT"] == "1" && p.environment["BB_PROBE"] == contents.appendingPathComponent("MacOS/bb-probe").path, "prebuilt probe")
     check(p.environment["PYTHON"] == contents.appendingPathComponent("Resources/python/bin/python3").path, "bundled Python")
     check(p.environment["VK_DRIVER_FILES"] == nil, "no Vulkan driver (Metal renderer)")
