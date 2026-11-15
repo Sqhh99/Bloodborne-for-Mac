@@ -85,9 +85,9 @@ static const Row pages[PAGE_COUNT][ROWS]={
     {T(BBMAC_EFFECT_FIRST+6),T(BBMAC_EFFECT_FIRST+7),T(BBMAC_EFFECT_FIRST+8),T(BBMAC_EFFECT_FIRST+9),C(BBMAC_DEBUG_VIEW,debug_views)},
     {C(BBMAC_LIVE_RESOLUTION,live_modes)},
     {T(BBMAC_FULLSCREEN),T(BBMAC_METAL_HUD),T(BBMAC_TEXTURE_COMPRESSION),C(BBMAC_FRAME_CAP,caps)},
-    {T(BBMAC_GAME_TIMING),T(BBMAC_SHOW_LAUNCHER),{BBMAC_COUNT,CONFIRM,0,1,1,NULL,0},{BBMAC_RESTART,RESTART,0,1,1,NULL,0}}
+    {T(BBMAC_GAME_TIMING),{BBMAC_COUNT,CONFIRM,0,1,1,NULL,0},{BBMAC_RESTART,RESTART,0,1,1,NULL,0}}
 };
-static const unsigned page_counts[]={5,5,1,5,5,5,1,4,4};
+static const unsigned page_counts[]={5,5,1,5,5,5,1,4,3};
 typedef struct { uint8_t byte; int32_t list,last; int readonly; } Value;
 static Value values[ROWS];
 static int confirmed;
@@ -156,10 +156,10 @@ static void build_rows(void *d) {
         int value=r->kind==CONFIRM || r->kind==RESTART ? 0 : bbgpu_mac_setting_get(r->field);
         v->list=value; v->byte=(uint8_t)(value/r->unit-r->min);
         int wide=bbgpu_mac_setting_get(BBMAC_NATIVE_ULTRAWIDE);
-        v->readonly=(r->field==BBMAC_SHOW_LAUNCHER && value<0) || (wide &&
-            (r->field==BBMAC_UPSCALER || r->field==BBMAC_PRESET || r->field==BBMAC_OUTPUT || r->field==BBMAC_LIVE_RESOLUTION));
+        v->readonly=wide &&
+            (r->field==BBMAC_UPSCALER || r->field==BBMAC_PRESET || r->field==BBMAC_OUTPUT || r->field==BBMAC_LIVE_RESOLUTION);
         unsigned id=r->kind==CONFIRM ? 126022 : 126100+r->field;
-        if (v->readonly) text_row(d,&v->byte,id,text(wide ? 126024 : 126023),0);
+        if (v->readonly) text_row(d,&v->byte,id,text(126024),0);
         else if (r->kind==LIST) list_row(d,v,id,r);
         else if (r->kind==SLIDER) slider_row(d,v,id,r);
         else toggle_row(d,v,id);

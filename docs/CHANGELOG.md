@@ -4,6 +4,9 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- The app always opens the launcher before playing. Removed the "Show launcher every time"
+  checkbox and its in-game counterparts; old settings no longer skip the launcher. "Hide launcher
+  while playing" still hides it during a session and brings it back when the game ends.
 - Default keyboard controls now use E to interact, Q to lock on / go back in menus, Space for
   native tap-to-dodge / hold-to-run, F to transform and Shift + wheel to switch weapons.
   Bloodborne's blood vial uses V; R stays the quick item. Ctrl and right click fire the gun.

@@ -178,10 +178,6 @@
     "text": "Texture compression",
     "help": "Use Metal lossless texture compression. Restart required."
   },
-  "126132": {
-    "text": "Show launcher at start",
-    "help": "Available only when this session was started by the launcher."
-  },
   "126133": {
     "text": "Restart required",
     "help": ""

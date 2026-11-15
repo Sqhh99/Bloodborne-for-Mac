@@ -8,7 +8,6 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var model: LauncherModel!
     private var window: NSWindow?
-    private var direct = false
     private var quitAfterStop = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,11 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         model.onStarted = { [weak self] in
             ModsWindow.hide()
             guard let self else { return }
-            if self.direct {
-                // Respect direct launch: only the game's window has a Dock icon.
-                self.window?.orderOut(nil)
-                NSApp.setActivationPolicy(.accessory)
-            } else if self.model.config.hideWhilePlaying && !self.model.benchmark.isRunning {
+            if self.model.config.hideWhilePlaying && !self.model.benchmark.isRunning {
                 // Out of the way while the game runs (its settings are locked then), Dock icon
                 // too: the game's window has its own "Bloodborne" icon, and a second one (or ⌘Tab
                 // to it) only brought the hidden launcher back. Back when the game ends (gameEnded
@@ -45,26 +40,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         model.onLanguageChanged = { [weak self] in self?.buildMenu() }
         model.load()
         buildMenu() // (launch.conf's language is known now)
-        // --updated: the copy an update just installed (Updater.install) shows its window.
-        // (⌥ is read before the update question, which may be answered after letting go of it.)
         // --benchmark: show the window and run the benchmark at once (scripted comparisons).
         if CommandLine.arguments.contains("--benchmark") {
             showWindow()
             model.startBenchmark(confirm: false)
             return
         }
-        let wantsWindow = CommandLine.arguments.contains("--updated") || NSEvent.modifierFlags.contains(.option)
-        // Asked before the game too: players who turned the window off would never see it.
         model.askAboutUpdatesIfNeeded()
-        if !wantsWindow && model.canSkipWindow {
-            direct = true
-            // The daily check runs in the background while the game plays (started here, not
-            // later: its save() must not rewrite bbport.ini while the game's menu may change it).
-            model.checkForUpdatesIfDue()
-            model.play()
-        } else {
-            showWindow()
-        }
+        showWindow()
     }
 
     private func gameEnded(_ status: Int32) {
@@ -72,17 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             NSApp.reply(toApplicationShouldTerminate: true)
             return
         }
-        if direct && status == 0 {
-            // With the window turned off, an update the check found shows once, after the session.
-            guard model.updater.available != nil else {
-                NSApp.terminate(nil)
-                return
-            }
-        } else if status != 0 {
+        if status != 0 {
             // The crash report comes first; the footer still links the update.
             model.updater.showing = false
         }
-        direct = false
         showWindow()
     }
 
@@ -134,7 +110,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        direct = false
         showWindow()
         return false
     }

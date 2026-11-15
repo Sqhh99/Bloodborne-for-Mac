@@ -22,9 +22,6 @@ enum Strings {
         "Mods & Cheats":
             (ja: "Mod とチート",
              zh: "模组与作弊"),
-        "Show launcher every time":
-            (ja: "毎回ランチャーを表示",
-             zh: "每次都显示启动器"),
         "Hide launcher while playing":
             (ja: "プレイ中はランチャーを隠す",
              zh: "游戏运行时隐藏启动器"),

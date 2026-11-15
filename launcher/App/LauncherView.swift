@@ -40,8 +40,6 @@ struct LauncherView: View {
             HStack(spacing: 12) {
                 Button(L("Mods & Cheats…")) { ModsWindow.show(launcher: model) }
                 Text(model.modsSummary).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                Toggle(L("Show launcher every time"), isOn: $model.config.showLauncher)
-                    .disabled(model.running)
                 UpdateBadge(updater: model.updater)
                 Spacer()
                 if let progress = model.benchmark.progress {

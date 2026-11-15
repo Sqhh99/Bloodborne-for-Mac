@@ -8,7 +8,6 @@
 #include <sstream>
 #include <string>
 #include <thread>
-#include <sys/wait.h>
 #include <unistd.h>
 #include "bbport_mac_settings.h"
 #include "bbport_settings.h"
@@ -75,22 +74,12 @@ int main() {
     }
     assert(Get(BBMAC_COUNT) == -1 && Get(UINT32_MAX) == -1);
 
-    // A direct launch cannot change launch.conf. The parent process has not cached it yet.
-    const pid_t child = fork();
-    assert(child >= 0);
-    if (child == 0) {
-        unsetenv("BB_LAUNCH_CONF");
-        assert(Get(BBMAC_SHOW_LAUNCHER) == -1);
-        assert(!Set(BBMAC_SHOW_LAUNCHER, 0));
-        _exit(0);
-    }
-    int status = 0;
-    assert(waitpid(child, &status, 0) == child && WIFEXITED(status) && WEXITSTATUS(status) == 0);
+    // The retired bridge field cannot change launch.conf, even with a legacy launcher setting.
     Write(launch, "# launcher options\nBB_SHOW_LAUNCHER='0'\nBB_GAME='/some path/game'\nFUTURE_OPTION=keep\n");
-    assert(Get(BBMAC_SHOW_LAUNCHER) == 0);
-    assert(Set(BBMAC_SHOW_LAUNCHER, 1) && Get(BBMAC_SHOW_LAUNCHER) == 1);
-    assert(Count(Read(launch), "BB_SHOW_LAUNCHER=1") == 1);
-    assert(Read(launch).find("BB_GAME='/some path/game'\nFUTURE_OPTION=keep\n") != std::string::npos);
+    const auto old_launch = Read(launch);
+    assert(Get(BBMAC_SHOW_LAUNCHER) == -1);
+    assert(!Set(BBMAC_SHOW_LAUNCHER, 0) && !Set(BBMAC_SHOW_LAUNCHER, 1));
+    assert(Read(launch) == old_launch);
 
     // Keep the user's unsupported provider and every unowned launcher / future framegen key.
     Write(config, "upscaler=fsr411\npreset=0\nfps_cap=40\ngame_timing=variable\nfullscreen=1\n"

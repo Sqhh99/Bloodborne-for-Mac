@@ -13,12 +13,12 @@ enum BbMacSetting {
     BBMAC_EFFECT_FIRST,
     BBMAC_EFFECT_LAST = BBMAC_EFFECT_FIRST + 9,
     BBMAC_FRAME_CAP, BBMAC_GAME_TIMING, BBMAC_FULLSCREEN, BBMAC_METAL_HUD,
-    BBMAC_TEXTURE_COMPRESSION, BBMAC_SHOW_LAUNCHER,
+    BBMAC_TEXTURE_COMPRESSION, BBMAC_SHOW_LAUNCHER, // retired; keep subsequent field IDs stable
     BBMAC_RESTART_NEEDED, BBMAC_PROVIDER_MASK, BBMAC_RESTART,
     BBMAC_NATIVE_ULTRAWIDE,
     BBMAC_COUNT
 };
-// Reads return -1 for an invalid field (and SHOW_LAUNCHER when unavailable).
+// Reads return -1 for an invalid or retired field (SHOW_LAUNCHER).
 // Writes reject invalid/read-only values; in split mode they are asynchronous and the next
 // host snapshot reflects them. Floats are hundredths (sharpness 30 = 0.30); enums use BbSettings.
 // Frame cap is FPS; timing 0 fixed/1 variable; launch-only edits need restart.

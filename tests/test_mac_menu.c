@@ -11,7 +11,7 @@ int32_t bbgpu_mac_setting_get(uint32_t field) { (void)field; return 0; }
 static int restart_requests,visual_restart;
 void bbgpu_mac_setting_set(uint32_t field,int32_t value) { if (field==BBMAC_RESTART && value==1) ++restart_requests; }
 static ABI uint8_t popup_state(void *w) { return *((uint8_t *)w+8); }
-static ABI void reset_action(void *w) { (void)w; visual_restart=0; values[3].byte=0; }
+static ABI void reset_action(void *w) { (void)w; visual_restart=0; values[2].byte=0; }
 
 static void seed(unsigned char *base) {
     image=base;
@@ -49,12 +49,12 @@ int main(void) {
     put64(widget,(uintptr_t)vtable); put64(row+0x80,(uintptr_t)widget);
     put64(fake_dialog+0xe58,(uintptr_t)row); put64(fake_dialog+0xe60,(uintptr_t)(row+sizeof(row)));
     assert(!row_captures_input(fake_dialog)); widget[8]=1; assert(row_captures_input(fake_dialog));
-    unsigned char restart_rows[5*0x90]={0};
-    vtable[4]=(uintptr_t)reset_action; put64(restart_rows+4*0x90+0x80,(uintptr_t)widget);
+    unsigned char restart_rows[4*0x90]={0};
+    vtable[4]=(uintptr_t)reset_action; put64(restart_rows+3*0x90+0x80,(uintptr_t)widget);
     put64(fake_dialog+0xe58,(uintptr_t)restart_rows); dialog=fake_dialog; page=8;
-    memset(values,0,sizeof(values)); confirmed=0; values[3].byte=1; visual_restart=1;
-    poll_values(); assert(!restart_requests && !visual_restart && !values[3].byte && !values[3].last);
-    confirmed=1; values[3].byte=1; visual_restart=1;
-    poll_values(); assert(restart_requests==1 && !visual_restart && !values[3].byte);
+    memset(values,0,sizeof(values)); confirmed=0; values[2].byte=1; visual_restart=1;
+    poll_values(); assert(!restart_requests && !visual_restart && !values[2].byte && !values[2].last);
+    confirmed=1; values[2].byte=1; visual_restart=1;
+    poll_values(); assert(restart_requests==1 && !visual_restart && !values[2].byte);
     free(before); free(base); puts("Native menu hook guards and input edges PASS");
 }

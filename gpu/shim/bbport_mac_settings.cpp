@@ -61,7 +61,6 @@ int32_t Get(uint32_t field) {
     case BBMAC_FULLSCREEN: return s.fullscreen;
     case BBMAC_METAL_HUD: return s.metal_hud;
     case BBMAC_TEXTURE_COMPRESSION: return s.texture_compression;
-    case BBMAC_SHOW_LAUNCHER: return BbSettings::ShowLauncher();
     case BBMAC_RESTART_NEEDED: return RestartNeeded();
     case BBMAC_PROVIDER_MASK: {
         int32_t mask = 0;
@@ -144,7 +143,6 @@ bool Set(uint32_t field, int32_t value) {
     case BBMAC_FULLSCREEN:
     case BBMAC_METAL_HUD:
     case BBMAC_TEXTURE_COMPRESSION:
-    case BBMAC_SHOW_LAUNCHER:
         if (!Boolean(value)) return false;
         switch (field) {
         case BBMAC_SHARPEN: s.sharpen = value != 0; break;
@@ -157,10 +155,6 @@ bool Set(uint32_t field, int32_t value) {
         case BBMAC_FULLSCREEN: s.fullscreen = value != 0; break;
         case BBMAC_METAL_HUD: s.metal_hud = value != 0; break;
         case BBMAC_TEXTURE_COMPRESSION: s.texture_compression = value != 0; break;
-        case BBMAC_SHOW_LAUNCHER:
-            if (BbSettings::ShowLauncher() < 0) return false;
-            BbSettings::SetShowLauncher(value != 0);
-            return true;
         }
         break;
     default: return false; // status fields and restart are handled by the C bridge
