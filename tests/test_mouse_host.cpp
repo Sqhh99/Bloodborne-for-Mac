@@ -58,6 +58,20 @@ int main() {
     scroll.wheel.direction=SDL_MOUSEWHEEL_NORMAL; scroll.wheel.y=0.25f;
     for (int i=0;i<4;++i) assert(BbMouse::HandleEvent(nullptr,scroll));
     assert(Read().wheel_serial==3 && Read().wheel_direction==1);
+    // Shift + wheel: macOS sends a wheel mouse's notch sideways (SDL x = -deltaX), still up / down.
+    SDL_MouseWheelEvent sideways{}; sideways.x=-1;
+    assert(BbMouse::WheelDelta(sideways,true)==1 && BbMouse::WheelDelta(sideways,false)==0);
+    sideways.x=1; sideways.direction=SDL_MOUSEWHEEL_FLIPPED; // natural scrolling: both inverted
+    assert(BbMouse::WheelDelta(sideways,true)==1);
+    sideways.x=-1; sideways.y=-2; sideways.direction=SDL_MOUSEWHEEL_NORMAL;
+    assert(BbMouse::WheelDelta(sideways,true)==-2); // a vertical step wins over a sideways one
+    SDL_SetModState(SDL_KMOD_LSHIFT);
+    scroll.wheel.y=0; scroll.wheel.x=1; // Shift + wheel down
+    assert(BbMouse::HandleEvent(nullptr,scroll));
+    assert(Read().wheel_serial==4 && Read().wheel_direction==-1);
+    SDL_SetModState(SDL_KMOD_NONE);
+    assert(BbMouse::HandleEvent(nullptr,scroll) && Read().wheel_serial==4); // sideways alone: nothing
+    scroll.wheel.x=0;
     SDL_Event focus{}; focus.type=SDL_EVENT_WINDOW_FOCUS_LOST;
     BbMouse::HandleEvent(nullptr,focus);
     assert(!Read().captured && Read().epoch==2 && Read().x==0 && Read().y==0);
