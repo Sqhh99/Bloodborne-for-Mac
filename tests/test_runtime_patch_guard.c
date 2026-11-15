@@ -7,6 +7,17 @@
 
 /* This verifier never installs a hook or runs the guest allocation callback. */
 void *runtime_low_alloc_aligned(size_t size,size_t align) { (void)size; (void)align; abort(); }
+/* Observer readiness is independent of the context-lock switch. No guest callback runs. */
+static int observers_ready=1;
+const char *runtime_mouse_patch_conflict(uint64_t offset,const unsigned char *data,size_t size) {
+    (void)offset; (void)data; (void)size; return NULL;
+}
+int runtime_menu_pointer_ready(void) { return observers_ready; }
+int runtime_quick_items_ready(void) { return observers_ready; }
+void runtime_menu_pointer_list_update(uint64_t component,uint64_t input) { (void)component; (void)input; abort(); }
+void runtime_menu_pointer_hooked(void) { abort(); }
+void runtime_quick_items_tick(void) { abort(); }
+void runtime_quick_items_hooked(void) { abort(); }
 
 static void entry(FILE *f,uint64_t offset,const unsigned char *data,uint64_t size) {
     assert(fwrite(&offset,8,1,f)==1 && fwrite(&size,8,1,f)==1);
@@ -40,6 +51,15 @@ int main(void) {
     setenv("BB_CONTEXT_LOCK","0",1);
     for (size_t i=0;i<sizeof(sites)/sizeof(sites[0]);++i)
         assert(!runtime_patch_conflict(sites[i],&changed,1));
+    const uint64_t observers[]={0x1acff30,0x2034770};
+    for (size_t i=0;i<sizeof(observers)/sizeof(observers[0]);++i) {
+        assert(runtime_patch_conflict(observers[i],&changed,1));
+        assert(!runtime_patch_conflict(observers[i],&original,1));
+    }
+    observers_ready=0;
+    for (size_t i=0;i<sizeof(observers)/sizeof(observers[0]);++i)
+        assert(!runtime_patch_conflict(observers[i],&changed,1));
+    observers_ready=1;
     assert(runtime_patch_conflict(0x2483ec1-0x400000,ret,sizeof(ret)));
     unsetenv("BB_CONTEXT_LOCK"); unsetenv("BB_FRAME_POOL");
     FILE *f=tmpfile(); assert(f);

@@ -53,6 +53,8 @@ typedef struct HookArgs {
     uint64_t r9, r8, rcx, rdx, rsi, rdi;
 } HookArgs;
 
+enum { OBSERVER_NONE, OBSERVER_MENU, OBSERVER_QUICK_ITEMS };
+
 typedef struct Hook {
     void *original;            /* the moved prologue + jump back: read by the asm at offset 0 */
     const char *name;
@@ -64,13 +66,14 @@ typedef struct Hook {
      * its return value. */
     void (*before)(const HookArgs *args);
     uint64_t (*after)(uint64_t ret); /* returns the value the caller gets */
-    int menu; /* the menu pointer's observer (runtime_menu_pointer.c): its own switch */
+    int observer; /* Independent of the context lock and frame-pool switches. */
 } Hook;
 
 static void frame_pool_flip(const HookArgs *args);
 static void linear_heap_alloc_args(const HookArgs *args);
 static uint64_t linear_heap_alloc_result(uint64_t ret);
 static void menu_list_update(const HookArgs *args) { runtime_menu_pointer_list_update(args->rdi, args->rsi); }
+static void quick_item_update(const HookArgs *args) { (void)args; runtime_quick_items_tick(); }
 
 static Hook hooks[] = {
     /* push rbp; mov rbp,rsp; push r15; push r14; push r13; push r12; push rbx; sub rsp,0x58 */
@@ -124,9 +127,21 @@ static Hook hooks[] = {
     {NULL, "menu list update", 0x1acff30,
      {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x81,
       0xec, 0x98, 0x00, 0x00, 0x00},
-     20, 0, 0, 0, 0, menu_list_update, NULL, 1},
+     20, 0, 0, 0, 0, menu_list_update, NULL, OBSERVER_MENU},
+    /* The main-thread Flipper update, also used by upstream's native equipment helpers.
+     * No stack arguments; consume item selection before this frame's game update. */
+    {NULL, "quick item update", 0x2034770,
+     {0x55, 0x48, 0x89, 0xe5, 0x41, 0x57, 0x41, 0x56, 0x41, 0x55, 0x41, 0x54, 0x53, 0x48, 0x83,
+      0xec, 0x38},
+     17, 0, 0, 0, 0, quick_item_update, NULL, OBSERVER_QUICK_ITEMS},
 };
 #define HOOK_COUNT (sizeof(hooks) / sizeof(hooks[0]))
+
+static int hook_disabled(const Hook *h,int lock_off,int pool_off) {
+    if (h->observer==OBSERVER_QUICK_ITEMS) return !runtime_quick_items_ready();
+    if (h->observer==OBSERVER_MENU) return !runtime_menu_pointer_ready();
+    return h->before ? pool_off : lock_off;
+}
 
 static int changes_bytes(uint64_t offset, const unsigned char *data, size_t size,
                          uint64_t start, const unsigned char *expected, size_t length) {
@@ -153,7 +168,7 @@ const char *runtime_patch_conflict(uint64_t offset, const unsigned char *data, s
     const int movie_off=env && env[0]=='0';
     for (size_t i=0;i<HOOK_COUNT;++i) {
         const Hook *h=&hooks[i];
-        if (h->menu ? !runtime_menu_pointer_ready() : h->before ? pool_off : lock_off) continue;
+        if (hook_disabled(h,lock_off,pool_off)) continue;
         if (h->offset==0x28fe7c0 && movie_off) continue;
         if (changes_bytes(offset,data,size,h->offset,h->prologue,h->prologue_size)) return h->name;
     }
@@ -514,9 +529,10 @@ void runtime_install_context_lock(unsigned char *image, uint64_t image_size) {
     }
     for (size_t i = 0; i < HOOK_COUNT; ++i) {
         Hook *h = &hooks[i];
-        if (h->menu ? !runtime_menu_pointer_ready() : h->before ? pool_off : lock_off) continue;
+        if (hook_disabled(h,lock_off,pool_off)) continue;
         if (h->offset == 0x28fe7c0 && movie_off) continue;
-        const char *what = h->menu ? "Menu pointer" : h->before ? "Frame pool" : "Context lock";
+        const char *what = h->observer==OBSERVER_QUICK_ITEMS ? "Quick items" :
+                           h->observer==OBSERVER_MENU ? "Menu pointer" : h->before ? "Frame pool" : "Context lock";
         if (h->offset + 14 > image_size || h->offset + h->prologue_size > image_size ||
             memcmp(image + h->offset, h->prologue, h->prologue_size)) {
             printf("%s: %s at 0x%" PRIx64 " does not match Bloodborne 1.09; not hooked\n", what, h->name,
@@ -552,7 +568,8 @@ void runtime_install_context_lock(unsigned char *image, uint64_t image_size) {
         put_jump(target, (uint64_t)(uintptr_t)entry);
         for (unsigned b = 14; b < h->prologue_size; ++b) target[b] = 0xcc; /* never reached */
         printf("%s: %s (0x%" PRIx64 ") hooked\n", what, h->name, h->offset);
-        if (h->menu) runtime_menu_pointer_hooked();
+        if (h->observer==OBSERVER_MENU) runtime_menu_pointer_hooked();
+        if (h->observer==OBSERVER_QUICK_ITEMS) runtime_quick_items_hooked();
     }
     atexit(print_stats);
 }

@@ -27,6 +27,8 @@ enum {
     BIND_DODGE, BIND_SPRINT,
     /* Only in game menus; Q can therefore lock on during play without pressing Circle. */
     BIND_MENU_BACK,
+    /* Native reverse quick-item selection; Bloodborne has no corresponding pad button. */
+    BIND_ITEM_PREVIOUS,
     BIND_COUNT
 };
 

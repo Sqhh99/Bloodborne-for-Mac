@@ -954,6 +954,7 @@ int main(int argc, char **argv) {
     }
     if (patch_file) apply_patches(patch_file, segments, ns, relocs, nr);
     runtime_pad_set_image(image, size);
+    runtime_quick_items_set_image(image, size);
     runtime_install_mouse_look(image, size);
     runtime_install_mac_settings(image, size);
     runtime_install_exit_menu(image, size);

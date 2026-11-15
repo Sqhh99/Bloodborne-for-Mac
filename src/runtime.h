@@ -132,6 +132,12 @@ void runtime_pad_set_shared(void *(*shared)(void));
 /* Validates the supported game's menu layout; enables contextual keyboard menu navigation. */
 void runtime_pad_set_image(unsigned char *image, uint64_t image_size);
 int runtime_pad_menu_active(void);
+/* Reverse quick-item requests are consumed on the game's main thread. */
+void runtime_quick_items_set_image(unsigned char *image, uint64_t size);
+int runtime_quick_items_ready(void);
+void runtime_quick_items_hooked(void);
+void runtime_quick_items_input(int held, int allowed);
+void runtime_quick_items_tick(void);
 void runtime_mouse_set_shared(void *(*shared)(void));
 /* runtime_menu_pointer.c: the mouse as a pointer in the game's menus. */
 int runtime_read_guest(uintptr_t address, void *out, size_t size); /* checked copy; 0: not mapped */

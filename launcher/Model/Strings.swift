@@ -580,6 +580,9 @@ enum Strings {
         "Quick item (Square)":
             (ja: "クイックアイテム（□）",
              zh: "快捷道具（□）"),
+        "Previous quick item":
+            (ja: "前のクイックアイテム",
+             zh: "上一个快捷道具"),
         "Blood Vial (Triangle)":
             (ja: "輸血液（△）",
              zh: "采血瓶（△）"),

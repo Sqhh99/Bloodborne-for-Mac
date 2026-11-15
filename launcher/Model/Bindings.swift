@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
-/// One thing a key or mouse button can do: a pad input of the game (src/runtime_bindings.c, same
-/// ini keys and defaults).
+/// One thing a key or mouse button can do (src/runtime_bindings.c, same ini keys and defaults).
 struct BindAction: Identifiable, Hashable {
     let key: String
     let label: String
@@ -45,9 +44,10 @@ struct Bindings: Equatable {
         BindAction(key: "bind_triangle", label: "Blood Vial (Triangle)", group: "Actions", defaults: ["V"]),
         BindAction(key: "bind_l3", label: "L3", group: "Actions", defaults: ["X"]),
         BindAction(key: "bind_dpad_up", label: "Up", group: "D-pad", defaults: ["3", "Up"]),
-        BindAction(key: "bind_dpad_down", label: "Down", group: "D-pad", defaults: ["4", "Down", "Left Shift+Wheel Down"]),
-        BindAction(key: "bind_dpad_left", label: "Left (left-hand weapon)", group: "D-pad", defaults: ["1", "Left"]),
+        BindAction(key: "bind_dpad_down", label: "Down", group: "D-pad", defaults: ["4", "Down", "Wheel Down"]),
+        BindAction(key: "bind_dpad_left", label: "Left (left-hand weapon)", group: "D-pad", defaults: ["1", "Left", "Left Shift+Wheel Down"]),
         BindAction(key: "bind_dpad_right", label: "Right (right-hand weapon)", group: "D-pad", defaults: ["2", "Right", "Left Shift+Wheel Up"]),
+        BindAction(key: "bind_item_previous", label: "Previous quick item", group: "D-pad", defaults: ["Wheel Up"]),
         BindAction(key: "bind_menu_back", label: "Back in game menus", group: "Menus", defaults: ["Q"]),
         BindAction(key: "bind_options", label: "Menu (Options)", group: "Menus", defaults: ["Escape"]),
         BindAction(key: "bind_touch_left", label: "Gestures (touchpad left)", group: "Menus", defaults: ["G"]),
