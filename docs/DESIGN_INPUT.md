@@ -26,8 +26,10 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   compatibility: WASD move, IJKL camera, Space Circle (tap dodge / hold sprint / release and
   repress while sprinting to jump), Left Alt walk, E / Return Cross, V Triangle, R / Tab Square,
   F L1, Q / middle click R3, X L3, Escape Options, G / Backspace touchpad left / right. The d-pad
-  uses 1 2 3 4 and arrows. Wheel up changes the right weapon, down the quick item; Shift + wheel
-  down changes the left weapon. Blood bullets remain 3 / Up, off the wheel to avoid health loss.
+  uses 1 2 3 4 and arrows. Shift + wheel up changes the right weapon, Shift + wheel down the quick
+  item (2026-11-14: the plain wheel switched them by accident when reaching for the middle-click
+  lock-on); the left weapon is 1 / Left only. In the game's menus the plain wheel still scrolls
+  (menu pointer). Blood bullets remain 3 / Up, off the wheel to avoid health loss.
   Mouse left R1, Shift + left / back R2, Ctrl / right / Shift + right L2, forward L1. V keeps
   vials separate from Q lock-on and R quick items; F transforms instead of changing the grip.
   An ini with its own `bind_` lines keeps them; only absent keys get the new defaults.
