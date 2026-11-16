@@ -354,6 +354,9 @@
             <Line Type="bytes32" Address="0x01BF9439" Value="0x3F000000"/>
         </PatchList>
     </Metadata>
+    <!-- FPS variants deliberately leave 0x04d2728c at the retail 1/30: event-script
+         frame counts are authored durations, not render steps. 0.04 delays the Doll's
+         follow-up pose and exposes an idle-pose reset. See docs/FINDINGS.md (2026-11-16). -->
     <Metadata Title="Bloodborne" Name="30 FPS++" Note="Changes some frame settings like the frame skip, vsync, frame tearing, etc.. \nWill help with better input delay/response times for 30 FPS." Author="Kyo" PatchVer="1.0" AppVer="01.09" AppElf="eboot.bin" isEnabled="false">
         <PatchList>
             <Line Type="bytes" Address="0x00fbc40f" Value="eb1d"/>
@@ -429,7 +432,6 @@
             <Line Type="bytes" Address="0x04d29170" Value="8988083D"/>
             <Line Type="bytes" Address="0x04d26364" Value="8988083D"/>
             <Line Type="bytes" Address="0x04d27284" Value="8988883D"/>
-            <Line Type="bytes" Address="0x04d2728c" Value="0AD7233D"/>
             <Line Type="bytes" Address="0x04D25E94" Value="8988883D"/>
             <Line Type="bytes" Address="0x04D25E68" Value="CDCCCC3C"/>
             <Line Type="bytes" Address="0x02434FA8" Value="89F8FFFF"/>
@@ -617,7 +619,6 @@
             <Line Type="bytes" Address="0x04d29170" Value="8988883C"/>
             <Line Type="bytes" Address="0x04d26364" Value="8988083D"/>
             <Line Type="bytes" Address="0x04d27284" Value="8988883D"/>
-            <Line Type="bytes" Address="0x04d2728c" Value="0AD7233D"/>
             <Line Type="bytes" Address="0x04D25E94" Value="8988883D"/>
         </PatchList>
     </Metadata>
@@ -813,7 +814,6 @@
             <Line Type="bytes" Address="0x04d29170" Value="8988883C"/>
             <Line Type="bytes" Address="0x04d26364" Value="8988083D"/>
             <Line Type="bytes" Address="0x04d27284" Value="8988883D"/>
-            <Line Type="bytes" Address="0x04d2728c" Value="0AD7233D"/>
             <Line Type="bytes" Address="0x04D25E94" Value="8988883D"/>
         </PatchList>
     </Metadata>
@@ -1009,7 +1009,6 @@
             <Line Type="bytes" Address="0x04d29170" Value="610B363C"/>
             <Line Type="bytes" Address="0x04d26364" Value="8988083D"/>
             <Line Type="bytes" Address="0x04d27284" Value="8988083D"/>
-            <Line Type="bytes" Address="0x04d2728c" Value="0AD7233D"/>
             <Line Type="bytes" Address="0x04D25E94" Value="8988083D"/>
         </PatchList>
     </Metadata>
@@ -1164,7 +1163,6 @@
             <Line Type="bytes" Address="0x04D25844" Value="8988083C"/>
             <Line Type="bytes" Address="0x04d26364" Value="8988083D"/>
             <Line Type="bytes" Address="0x04d27284" Value="8988083D"/>
-            <Line Type="bytes" Address="0x04d2728c" Value="0AD7233D"/>
             <Line Type="bytes" Address="0x01BF9CB6" Value="8988883C"/>
             <Line Type="bytes" Address="0x02483EC1" Value="C3"/>
             <Line Type="bytes" Address="0x02483EC2" Value="90"/>

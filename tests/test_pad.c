@@ -247,7 +247,9 @@ static void test_menu_keys(void) {
     (void)PRESS(SDL_SCANCODE_UNKNOWN);
     d=PRESS(SDL_SCANCODE_ESCAPE);
     assert(d.buttons==BTN_CIRCLE);
-    /* The movement keys are the menu's arrows, and the hunter stands. */
+    /* The movement keys are the menu's arrows, and the hunter stands (once half a second has
+     * passed since that Back: presses during a closing list's fade are not the d-pad). */
+    (void)PRESS(SDL_SCANCODE_UNKNOWN); menu_back_guard_until=0;
     d=PRESS(SDL_SCANCODE_W,SDL_SCANCODE_D);
     assert(d.buttons==(BTN_UP|BTN_RIGHT) && d.left_x==128 && d.left_y==128);
     d=PRESS(SDL_SCANCODE_A,SDL_SCANCODE_S);
@@ -264,6 +266,57 @@ static void test_menu_keys(void) {
     (void)PRESS(SDL_SCANCODE_UNKNOWN);
     d=PRESS(SDL_SCANCODE_Q);
     assert(d.buttons==BTN_R3);
+    /* Headstone / travel lists: Back + WASD must never expose a d-pad press while closing.
+     * Keep each consumed direction neutral through the fade and parent menus until released;
+     * a held movement key can immediately walk once the menu has gone. */
+    const struct { SDL_Scancode key; uint32_t button; } directions[]={
+        {SDL_SCANCODE_A,BTN_LEFT},{SDL_SCANCODE_D,BTN_RIGHT},
+        {SDL_SCANCODE_W,BTN_UP},{SDL_SCANCODE_S,BTN_DOWN},
+    };
+    const SDL_Scancode backs[]={SDL_SCANCODE_Q,SDL_SCANCODE_ESCAPE,SDL_SCANCODE_SPACE};
+    for (size_t b=0;b<sizeof backs/sizeof backs[0];++b) {
+        for (size_t i=0;i<sizeof directions/sizeof directions[0];++i) {
+            (void)PRESS(SDL_SCANCODE_UNKNOWN);
+            menu_back_guard_until=0; /* a new list, opened long after the last Back */
+            menu=1; memcpy(flow+0xa88,&menu,sizeof menu); LIST_UPDATE();
+            d=press(&directions[i].key,1);
+            assert(d.buttons==directions[i].button); /* navigation before closing */
+            SDL_Scancode together[]={backs[b],directions[i].key};
+            d=press(together,2);
+            assert(d.buttons==BTN_CIRCLE);
+            d=press(&directions[i].key,1); /* Back released, list still fading / parent open */
+            assert(!d.buttons && d.left_x==128 && d.left_y==128);
+            menu=0; memcpy(flow+0xa88,&menu,sizeof menu);
+            d=press(&directions[i].key,1);
+            assert(!d.buttons && (d.left_x!=128 || d.left_y!=128)); /* walk, never a d-pad */
+            menu=1; memcpy(flow+0xa88,&menu,sizeof menu); LIST_UPDATE();
+            d=press(&directions[i].key,1);
+            assert(!d.buttons); /* held direction stays consumed even in the next list */
+            (void)PRESS(SDL_SCANCODE_UNKNOWN);
+            menu_back_guard_until=0; /* half a second after Back: a parent list's own input */
+            d=press(&directions[i].key,1);
+            assert(d.buttons==directions[i].button); /* a fresh press navigates normally */
+            (void)PRESS(SDL_SCANCODE_UNKNOWN);
+            (void)press(&backs[b],1); /* Back first, direction pressed on the next sample */
+            d=press(together,2);
+            assert(d.buttons==BTN_CIRCLE);
+            /* A quick tap of Back, then the key while the list fades out (still focused):
+             * neither the d-pad nor a step, then a walk once the list has gone. */
+            (void)PRESS(SDL_SCANCODE_UNKNOWN);
+            menu_back_guard_until=0;
+            (void)press(&backs[b],1);
+            (void)PRESS(SDL_SCANCODE_UNKNOWN);
+            LIST_UPDATE();
+            d=press(&directions[i].key,1);
+            assert(!d.buttons && d.left_x==128 && d.left_y==128);
+            menu=0; memcpy(flow+0xa88,&menu,sizeof menu);
+            d=press(&directions[i].key,1);
+            assert(!d.buttons && (d.left_x!=128 || d.left_y!=128));
+            (void)PRESS(SDL_SCANCODE_UNKNOWN);
+            menu_back_guard_until=0;
+        }
+    }
+    (void)PRESS(SDL_SCANCODE_UNKNOWN);
     /* A message with one button (or a pick-up notice): a menu object and a focused list of one
      * item, but the hunter moves and fights on behind it. Holding A there and pressing E pressed
      * the d-pad (weapons switched, blood bullets made): the keys must stay what they are in

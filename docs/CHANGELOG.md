@@ -12,6 +12,12 @@ What each release of the macOS port changed, newest first. Moved here from the R
   Bloodborne's blood vial uses V; R stays the quick item. Ctrl and right click fire the gun.
 - WASD navigates game menus and the Mac overlay, without switching equipment while moving.
   A menu-closing Q press cannot become lock-on until released; Shift + attack no longer sprints.
+- Closing a travel list with Q no longer switches weapons, items or blood bullets when W/A/S/D
+  is held with Q or pressed just after it. Movement aliases held with Back, or pressed within
+  half a second of it (the list's fade-out), are consumed until released; the hunter walks
+  as soon as the list has gone.
+- The Doll's level-up and gesture animations no longer briefly reset to standing before their
+  follow-up pose. FPS patches preserve the event scripts' authored frame-duration unit.
 - Free look follows mouse displacement directly: equal distances produce equal turns at any
   swipe speed. The native camera path removes stick acceleration / dead zones / maximum turn
   speed and consumes each movement only once. Menus and focus changes discard stale turns.

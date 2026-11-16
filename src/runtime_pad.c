@@ -126,9 +126,12 @@ static uint8_t key_axis(int negative, int positive, int reach) {
 #define MENU_FLOW_OFFSET 0x5580e38u
 #define MENU_LIST_UPDATE_OFFSET 0x1acff30u
 static uintptr_t menu_flow_address;
+static uint64_t menu_movement_consumed;
+static uint64_t menu_back_guard_until; /* us: movement presses after Back are not the d-pad */
 void runtime_pad_set_image(unsigned char *image, uint64_t size) {
     static const unsigned char signature[]={0x55,0x48,0x89,0xe5,0x41,0x57};
     menu_flow_address=0;
+    menu_movement_consumed=0; menu_back_guard_until=0;
     runtime_menu_pointer_set_image(image,size);
     if (!image || size<MENU_FLOW_OFFSET+sizeof(uintptr_t) ||
         memcmp(image+MENU_LIST_UPDATE_OFFSET,signature,sizeof signature)) return;
@@ -382,6 +385,26 @@ static void sample_devices(PadData *d) {
     else if (!menu) options_latched=1;
     if (!HELD(BIND_MENU_BACK)) back_consumed=0;
     else if (menu) back_consumed=1;
+    /* Back and a movement alias must not send Circle + d-pad in the same sample: closing
+     * the menu can expose that d-pad press to gameplay (weapons / quick items / blood bullets).
+     * Consume each such movement press until release, including a menu's closing animation or
+     * a return to its parent list. Outside menus the same held key can still walk the hunter.
+     * A list keeps the input focus while it fades out after Back (0.25-0.35 s measured at the
+     * headstones, 2026-11-16): a movement key pressed then, after a quick tap of Q, was the
+     * d-pad, which the game applied once the list had gone (W/A/S/D: blood bullets, left
+     * weapon, quick item, right weapon). Presses within MENU_BACK_GUARD_US of Back are consumed
+     * too; a parent list takes fresh presses after that. */
+    enum { MENU_BACK_GUARD_US=500000 };
+    const uint64_t movement_mask=(UINT64_C(1)<<BIND_MOVE_FORWARD)|(UINT64_C(1)<<BIND_MOVE_BACK)|
+                                 (UINT64_C(1)<<BIND_MOVE_LEFT)|(UINT64_C(1)<<BIND_MOVE_RIGHT);
+    const int menu_back=HELD(BIND_MENU_BACK) || HELD(BIND_CIRCLE) || HELD(BIND_DODGE) ||
+                        HELD(BIND_SPRINT) || (HELD(BIND_OPTIONS) && !options_latched);
+    const uint64_t sample_us=now_us();
+    if (menu && menu_back) menu_back_guard_until=sample_us+MENU_BACK_GUARD_US;
+    menu_movement_consumed&=held;
+    if (menu && (menu_back || sample_us<menu_back_guard_until)) menu_movement_consumed|=held&movement_mask;
+    const uint64_t navigation=held&~menu_movement_consumed;
+#define NAV_HELD(a) ((navigation>>(a))&1)
     static const struct { int action; uint32_t ps; } buttons[]={
         {BIND_CROSS,BTN_CROSS}, {BIND_CIRCLE,BTN_CIRCLE}, {BIND_SQUARE,BTN_SQUARE}, {BIND_TRIANGLE,BTN_TRIANGLE},
         {BIND_R1,BTN_R1}, {BIND_R2,BTN_R2}, {BIND_L1,BTN_L1}, {BIND_L2,BTN_L2}, {BIND_R3,BTN_R3}, {BIND_L3,BTN_L3},
@@ -400,12 +423,28 @@ static void sample_devices(PadData *d) {
          * list with several items has the input focus): the game's menus follow the d-pad only,
          * the stick walks the hunter even then. Opposite keys cancel, as on a stick. */
         if (choice) {
-            if (HELD(BIND_MOVE_FORWARD) && !HELD(BIND_MOVE_BACK)) d->buttons|=BTN_UP;
-            if (HELD(BIND_MOVE_BACK) && !HELD(BIND_MOVE_FORWARD)) d->buttons|=BTN_DOWN;
-            if (HELD(BIND_MOVE_LEFT) && !HELD(BIND_MOVE_RIGHT)) d->buttons|=BTN_LEFT;
-            if (HELD(BIND_MOVE_RIGHT) && !HELD(BIND_MOVE_LEFT)) d->buttons|=BTN_RIGHT;
+            if (NAV_HELD(BIND_MOVE_FORWARD) && !NAV_HELD(BIND_MOVE_BACK)) d->buttons|=BTN_UP;
+            if (NAV_HELD(BIND_MOVE_BACK) && !NAV_HELD(BIND_MOVE_FORWARD)) d->buttons|=BTN_DOWN;
+            if (NAV_HELD(BIND_MOVE_LEFT) && !NAV_HELD(BIND_MOVE_RIGHT)) d->buttons|=BTN_LEFT;
+            if (NAV_HELD(BIND_MOVE_RIGHT) && !NAV_HELD(BIND_MOVE_LEFT)) d->buttons|=BTN_RIGHT;
         }
     } else if (keyboard_circle(HELD(BIND_DODGE),HELD(BIND_SPRINT),d->timestamp)) d->buttons|=BTN_CIRCLE;
+    /* BB_PAD_LOG=1: what the keyboard became at each change, with the menu signals. */
+    static int pad_log=-1;
+    if (pad_log<0) { const char *e=getenv("BB_PAD_LOG"); pad_log=e && e[0]=='1'; }
+    if (pad_log) {
+        static uint64_t last_key=UINT64_MAX;
+        const uint64_t key=(uint64_t)(d->buttons&0xffffu)|(uint64_t)menu<<16|(uint64_t)choice<<17|
+                           (uint64_t)menu_back<<18|((held&movement_mask)>>BIND_MOVE_FORWARD)<<20|
+                           ((menu_movement_consumed&movement_mask)>>BIND_MOVE_FORWARD)<<24;
+        if (key!=last_key) {
+            last_key=key;
+            printf("Pad log %llu ms: buttons 0x%04x menu %d choice %d back %d move 0x%x consumed 0x%x\n",
+                   (unsigned long long)(now_us()/1000),d->buttons&0xffffu,menu,choice,menu_back,
+                   (unsigned)((held&movement_mask)>>BIND_MOVE_FORWARD),
+                   (unsigned)((menu_movement_consumed&movement_mask)>>BIND_MOVE_FORWARD));
+        }
+    }
     if (HELD(BIND_TOUCH_LEFT)) touch_click(d,0);
     if (HELD(BIND_TOUCH_RIGHT)) touch_click(d,1);
     if (HELD(BIND_L2)) d->l2=255;
@@ -430,6 +469,7 @@ static void sample_devices(PadData *d) {
     if (HELD(BIND_CAMERA_UP) || HELD(BIND_CAMERA_DOWN))
         d->right_y=key_axis(HELD(BIND_CAMERA_UP),HELD(BIND_CAMERA_DOWN),128);
 #undef HELD
+#undef NAV_HELD
 }
 
 /* Mouse look: the host window publishes the mouse's speed while it holds the cursor
