@@ -38,6 +38,13 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   movement bindings press only the d-pad; elsewhere they move only the stick. `bind_menu_back`
   (Q) presses Circle only in menus, suppressing R3 until release. Escape switches to Back after
   its opening press is released. Missing/unsupported images disable contextual aliases.
+  Back also consumes any simultaneously held movement aliases until each is released: closing
+  a headstone/travel list must not send Circle plus a d-pad press into gameplay. The latch
+  survives the closing animation and parent-list transitions; outside menus the held key can
+  still walk immediately. A list keeps the input focus while it fades out (0.25-0.35 s), so
+  movement keys pressed within 0.5 s after Back are consumed the same way; after that, fresh
+  movement presses navigate normally. `BB_PAD_LOG=1` logs what the keyboard became (buttons,
+  menu/choice/back, held and consumed movement) at every change.
   **A menu, for these keys, is the title menu or a menu object with something to choose from**
   (2026-11-14): a list with several items had the input focus in the last 250 ms, which the
   list-update hook of `src/runtime_menu_pointer.c` sees. A menu object alone is not enough:

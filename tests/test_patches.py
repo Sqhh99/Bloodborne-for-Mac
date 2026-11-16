@@ -191,6 +191,21 @@ class ExternalPatchTests(unittest.TestCase):
 
 
 class PatchSafetyTests(unittest.TestCase):
+    def test_event_frame_durations_keep_authored_30_fps_units(self):
+        # Event instructions count authored PS4 frames, independently of the render rate.
+        # Changing this multiplier to 0.04 makes a 90-frame wait last 3.6 s instead of
+        # 3 s: the Doll's 3 s kneel finishes before its follow-up, exposing her idle pose.
+        first=0x04d2728c-EBOOT_BASE
+        for name in ('30 FPS++','60FPS (no deltatime)','60 FPS++','90 FPS++','Uncap FPS++'):
+            with self.subTest(name=name):
+                value=bytearray(struct.pack('<f',1/30))
+                for offset,data in compile_patches(XML,[name],'01.09',SEGMENTS):
+                    begin=max(first,offset)
+                    end=min(first+4,offset+len(data))
+                    if begin<end:
+                        value[begin-first:end-first]=data[begin-offset:end-offset]
+                self.assertAlmostEqual(90*struct.unpack('<f',value)[0],3.0,places=6)
+
     def test_frame_rate_patches_leave_original_timed_call(self):
         first=0x02483ec1-EBOOT_BASE
         for name in ('60 FPS++','90 FPS++','Uncap FPS++'):

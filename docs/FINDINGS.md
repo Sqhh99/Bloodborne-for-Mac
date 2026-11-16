@@ -2677,3 +2677,63 @@ An isolated app using a save copy loaded into the world and logged the verified
 `0x2034770` quick-item hook as installed; the real save was not used for automated testing.
 The owner subsequently tested the updated local app and confirmed no issues on 2026-11-15.
 
+## 2026-11-16: Back + movement leaks through a closing travel list (fork)
+
+The owner reported Q+D switching the right weapon and Q+A switching the left weapon while
+closing either headstone travel list. `sample_devices` emitted Circle and the contextual
+WASD d-pad alias together. The menu can close before gameplay consumes that direction; the
+list-focus cache can also outlive the list. A held direction could therefore become equipment
+selection. Back now consumes the held movement aliases until each is released, including
+the closing fade and a return to a parent list. Gameplay stick movement resumes as soon as the
+menu is gone. Physical d-pad bindings and fresh menu-navigation presses retain their meaning.
+
+The production pad fixture passes Q/Esc/Space with all four movement directions, both press
+orders, release through a fading/parent list, immediate movement outside menus and fresh
+navigation after release. The existing one-button-message and wheel tests still pass.
+
+**Follow-up (same day): not enough in the game.** The owner still switched weapons and items
+with Q + W/A/S/D. Pad-file sequences at the Hunter's Dream headstone (isolated save copy)
+showed what the game reacts to: d-pad Right pressed and released inside the list, then Circle,
+switched nothing; Circle with Right released in the same sample switched nothing; Circle with
+Right still held into play (the pre-fix output) switched the weapon. A new `BB_PAD_LOG=1`
+log of the owner's own keyboard closes showed the remaining path: Q tapped and released, then
+the movement key pressed 50-250 ms later, while the list was still fading out with the input
+focus (`menu 1 choice 1 back 0`), so it became the d-pad (S: down 0x40, A: left 0x80), and the
+game applied it once the list had gone. The list kept the focus 0.23-0.33 s after Q's
+release. Movement presses within 0.5 s of Back are now consumed too (until released; the
+hunter walks once the list has gone). The owner retested Q + W/A/S/D (tap and hold) in the
+test copy: no switch, walking away works; the log showed d-pad presses only inside open lists.
+
+## 2026-11-16: Doll animation reset between event-driven poses (fork)
+
+Reproduced at fixed 60 FPS with an isolated copy of the owner's save. A diagnostic Flipper
+observer sampled the Doll's TimeAct history (`[[chr+0x3b0]+0x18]`, the 10-entry ring at +0x20,
+write index +0xc0); frame snapshots independently showed the brief standing pose. The gesture
+test used Curtsey, to which the Doll bows. No automated run used the real save.
+
+The cause is the FPS XML's write of `0.04` to PS4 address `0x04d2728c` (image `0x492728c`).
+This is an event-script frame-count-to-seconds conversion, not the current frame's timestep:
+`0x17c8a90` converts fixed and random authored frame waits with this constant at `0x17c8bb2`,
+`0x17c8cd5` and `0x17c8cf6`. The retail value is `1/30`. A 90-frame wait must last 3 s even
+at 60 FPS, but the XML made it 3.6 s. The previous animation finished, exposing animation 0
+(standing idle), before the script requested the follow-up pose. This matches the distinction
+between authored frame durations and update steps documented in
+[bbhost's frame-rate implementation](https://github.com/droogie/bbhost/blob/master/src/engine/frame_rate.cpp).
+
+Measured animation transitions (seconds are host monotonic time; samples every 100 ms):
+
+| Flow | Original FPS patch | Only `0x492728c` restored to retail |
+|---|---|---|
+| Level-up kneel, 7021 (3 s) → kneeling 9010 | 7021 at 426723.120; idle 0 at 426726.155; 9010 at 426726.720 | 7021 at 427059.719; 9010 at 427062.669; no intermediate idle |
+| Doll's bow, 7026 (1⅓ s) → 7025 (1½ s) | 7026 at 427241.497; idle 0 at 427242.846; 7025 at 427243.080 | 7026 at 427136.867; 7025 at 427138.200; no intermediate idle |
+
+Live A/B used the same diagnostic executable and the same world; switching only this constant
+back to `0.04` restored the bow's intermediate idle. Restoring two other event-wait constants
+(`0x48af1c0`, `0x4927284`) alone did **not** fix the reported issue; they are not part of this
+change. The production fix removes the `0.04` write from all five FPS variants, preserving the
+native conversion without changing the chosen FPS cap, task timestep or physics patch.
+The patch regression applies each compiled FPS variant to a retail-valued duration and checks
+that 90 authored frames still mean 3 s. All 28 patch tests pass; the runtime and both native
+GPU hosts build successfully. Diagnostic observers, warp controls, copied saves and captures
+remain in ignored `out/doll-repro`, outside the production runtime.
+
