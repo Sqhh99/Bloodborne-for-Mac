@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bbport_mouse.h"
+#include "bbport_cursor.h"
 
 #include <algorithm>
 #include <array>
@@ -45,6 +46,7 @@ void SetCursorHidden(bool hide) {
     if (cursor_hidden != hide) {
         cursor_hidden = hide;
         hide ? SDL_HideCursor() : SDL_ShowCursor();
+        BbCursor::SetHiddenUntilMouseMoves(hide);
     }
 }
 
@@ -182,6 +184,11 @@ bool HandleEvent(SDL_Window* window, const SDL_Event& event) {
     if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
         event.type == SDL_EVENT_MOUSE_WHEEL) {
         last_pointer_ns = SDL_GetTicksNS();
+        SetCursorHidden(false);
+    }
+    // A hide before activation may not take effect; retry after the window becomes active.
+    if (event.type == SDL_EVENT_WINDOW_FOCUS_GAINED || event.type == SDL_EVENT_WINDOW_MOUSE_ENTER ||
+        event.type == SDL_EVENT_WINDOW_SHOWN) {
         SetCursorHidden(false);
     }
     // A game menu is open: the mouse points and clicks there (never the camera, never an attack).
@@ -330,8 +337,10 @@ void Update(SDL_Window* window) {
         }
     }
     const u64 now = SDL_GetTicksNS();
-    // The menu and the text dialog keep it (the menu consumes the mouse's events).
-    SetCursorHidden(!captured && !BbOverlay::CapturesInput() &&
+    if (last_pointer_ns == 0) last_pointer_ns = now;
+    // Keep the cursor in both the Mac overlay and the fork's native game menus. Never
+    // hide another application's cursor while this game is in the background.
+    SetCursorHidden(focused && !captured && !PointerWanted(s) && !BbOverlay::CapturesInput() &&
                     now - last_pointer_ns > IdleCursorNs);
     if (!captured) {
         return;

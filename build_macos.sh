@@ -102,6 +102,8 @@ if [[ ${1:-} == --test ]]; then
     python3 tests/test_launcher_stop.py
     "$CC" "${cflags[@]}" "${includes[@]}" -I. -Isrc tests/test_pad.c src/runtime_bindings.c src/runtime_mouse.c src/runtime_menu_pointer.c src/runtime_quick_items.c src/runtime_host.c "${libraries[@]}" -Wl,-rpath,"$PREFIX/lib" -o out/pad-test
     out/pad-test
+    "$CC" "${cflags[@]}" -Isrc tests/test_text_input.c -o out/text-input-test
+    out/text-input-test
     "$CC" "${cflags[@]}" -I. -Isrc tests/test_quick_items.c src/runtime_host.c -o out/quick-items-test
     out/quick-items-test
     "$CC" "${cflags[@]}" -I. -Isrc tests/test_mouse_look.c -o out/mouse-look-test
@@ -152,8 +154,11 @@ if [[ ${1:-} == --test ]]; then
             -Wl,-rpath,"$ROOT/${walker#*:}" -o "out/srt-walker-test-${walker%%:*}"
         "out/srt-walker-test-${walker%%:*}"
         # Vertex/tessellation descriptor reads use the same bounded guest-fault recovery.
-        cmake --build "${walker#*:}" --target shader-userdata-test >/dev/null
-        "${walker#*:}/shader-userdata-test"
+        cmake --build "${walker#*:}" --target shader-userdata-test gnm-submit-validation-test \
+            gnm-submit-api-test upload-reservation-test >/dev/null
+        for boundary in shader-userdata-test gnm-submit-validation-test gnm-submit-api-test upload-reservation-test; do
+            "${walker#*:}/$boundary"
+        done
     done
     # Metal-native M1: Metal::Object, Device ticks and limits, Metal::Encoder (arm64, no window);
     # again under Metal's validation layer.

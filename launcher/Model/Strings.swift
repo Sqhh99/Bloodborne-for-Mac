@@ -6,6 +6,14 @@
 /// sources and every label of the settings and bindings tables has an entry here.
 enum Strings {
     static let table: [String: (ja: String, zh: String)] = [
+        "MetalFX Spatial":
+            (ja: "MetalFX Spatial", zh: "MetalFX Spatial"),
+        "Spatial: lighter on the GPU, shimmers more in motion.":
+            (ja: "Spatial：GPU 負荷は軽くなりますが、動きのある場面でちらつきが増えます。",
+             zh: "Spatial：GPU 开销更低，但运动画面更容易闪烁。"),
+        "MetalFX temporal: recommended for a steadier image in motion.":
+            (ja: "MetalFX 時間的処理：動きのある場面で安定した画質におすすめです。",
+             zh: "MetalFX 时域处理：运动画面更稳定，推荐使用。"),
         // Main window
         "General":
             (ja: "一般",

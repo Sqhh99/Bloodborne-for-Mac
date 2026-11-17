@@ -98,6 +98,10 @@ int main() {
     assert(Count(text, "ultrawide_res=3840x1080") == 1);
     assert(Count(text, "standard_output_res=2560x1440") == 1);
     assert((OutputSize() == std::array<int, 2>{3840, 1080}));
+    setenv("BB_ULTRAWIDE_RES", "3840x1620", 1);
+    Load();
+    assert((OutputSize() == std::array<int, 2>{3840, 1620}));
+    assert(Get().upscaler == UpscalerOff && Get().preset == NativeAA);
     unsetenv("BB_ULTRAWIDE_RES");
     Load();
     assert((OutputSize() == std::array<int, 2>{1920, 1080}));

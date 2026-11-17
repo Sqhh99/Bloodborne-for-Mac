@@ -33,6 +33,19 @@ def immediate(writes, address):
 
 
 class NativeUiTests(unittest.TestCase):
+    def test_3840x1620_native_scene_and_wide_ui(self):
+        from patches import ultrawide_patch, ultrawide_writes
+        name = ultrawide_patch({'ultrawide_res': '3840x1620'})
+        writes = ultrawide_writes(XML, name, '01.09', SEGMENTS)
+        self.assertEqual(immediate(writes, SCENE_WIDTH), (0xB8, 3840))
+        self.assertEqual(immediate(writes, SCENE_HEIGHT), (0xB8, 1620))
+        ui_width = immediate(writes, UI_WIDTH)[1]
+        ui_height = immediate(writes, UI_HEIGHT)[1]
+        self.assertEqual(ui_width * 27, ui_height * 64)
+        # This is below 4K: grow the texture pool, preserve the retail first graphics heap.
+        self.assertIn((0x04B36DE0 - EBOOT_BASE, struct.pack('<I', 1536 * 1024 * 1024)), writes)
+        self.assertFalse(any(offset == 0x04B36DD8 - EBOOT_BASE for offset, _ in writes))
+
     def test_presets_keep_ui_native(self):
         for preset, expected in [(1, (1280, 720)), (2, (1130, 636)),
                                  (3, (960, 540)), (4, (640, 360))]:

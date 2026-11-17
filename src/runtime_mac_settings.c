@@ -64,7 +64,7 @@ static void function(unsigned char *out,unsigned vtable,void *fn) {
 }
 
 typedef struct { int value; unsigned message; } Choice;
-static const Choice upscalers[]={{0,126300},{1,126301},{2,126302},{3,126303},{4,126304},{5,126305}};
+static const Choice upscalers[]={{0,126300},{1,126301},{2,126302},{3,126303},{4,126304},{5,126305},{6,126306}};
 static const Choice presets[]={{0,126310},{1,126311},{2,126312},{3,126313},{4,126314}};
 static const Choice outputs[]={{0,126320},{1,126321},{2,126322},{3,126323},{4,126324}};
 static const Choice compilers[]={{0,126330},{1,126331},{2,126332}};

@@ -4,6 +4,20 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- Native 3840 × 1620 (21:9) is available in the launcher's ultrawide list, with the matching
+  scene, camera/UI and health-bar patch and the existing low-memory guidance.
+- MetalFX Spatial is an optional upscaler in the launcher, native game settings and Mac overlay, with GPU capability
+  fallback that preserves the saved choice. It costs less GPU work but shimmers more in motion;
+  temporal MetalFX keeps its jitter setting when switching back.
+- A still cursor hides after three seconds of controller play once the game has focus.
+  Native game menus and the Mac overlay keep it visible, and focus changes reset its state.
+- The launcher hands keyboard focus to its game window at startup, including checkout apps
+  whose GPU hosts link into out/. Fullscreen moves to another display retry activation at startup.
+- Text dialogs keep typed keys out of the game, including a held confirming key after the
+  overlay closes. Confirmed text drops accidental leading/trailing spaces.
+- GPU submissions validate the whole command batch before publishing work or patching a flip.
+  Shader descriptor reads check their complete width, and constant uploads reject invalid
+  reservations and arithmetic overflow before advancing the ring.
 - The launcher checks this fork's releases (`Sqhh99/Bloodborne-for-Mac`) for updates; the About
   panel's source/release links and packaged source-code link point to this repository too.
 - The app always opens the launcher before playing. Removed the "Show launcher every time"

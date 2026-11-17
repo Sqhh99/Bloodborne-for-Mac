@@ -80,6 +80,30 @@ do {
     check(ini["ultrawide_res"] == nil && ini["output_res"] == "2560x1440", "disable removes patch and restores standard output")
 }
 
+// The 1620p ultrawide choice persists as a native patch, without double scaling.
+do {
+    let wide = PixelSize(3840, 1620)
+    check(Resolution.ultrawideOutputs.contains(wide) && Resolution.wideLabel(wide).contains("21:9"), "1620p ultrawide is offered")
+    var settings = GameSettings()
+    settings.ultrawide = true
+    settings.wideOutput = wide
+    var ini = IniFile()
+    settings.apply(to: &ini)
+    check(ini["ultrawide_res"] == "3840x1620" && ini["upscaler"] == "off", "1620p native patch selection")
+    check(GameSettings(ini: ini).displayOutput == wide, "1620p selection survives reload")
+    check(Resolution.ultrawideMemoryWarning(wide, memoryBytes: 16 * 1024 * 1024 * 1024) != nil, "1620p memory guidance")
+}
+
+// Spatial has its own ini value and appears alongside temporal MetalFX.
+do {
+    var ini = IniFile(text: "upscaler=metalfx_spatial\npreset=2\n")
+    let spatial = GameSettings(ini: ini)
+    check(spatial.upscaler == .metalfx_spatial && spatial.upscaler.usesPreset, "read Spatial")
+    check(Upscaler.launcherChoices.contains(.metalfx_spatial), "Spatial is offered")
+    spatial.apply(to: &ini)
+    check(ini["upscaler"] == "metalfx_spatial", "Spatial round trip")
+}
+
 // GameSettings: defaults, reading, values the launcher does not offer, writing back.
 do {
     let defaults = GameSettings(ini: IniFile())
@@ -1156,6 +1180,25 @@ do {
         check(false, "icon made")
     }
 }
+
+// Focus follows only this app's GPU host, whether packaged or a checkout symlink.
+do {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("bb-focus-" + UUID().uuidString)
+    defer { try? fm.removeItem(at: root) }
+    let bundle = root.appendingPathComponent("Bloodborne.app")
+    let host = bundle.appendingPathComponent("Contents/MacOS/bbgpu-host")
+    let target = root.appendingPathComponent("out/bbgpu-host")
+    try fm.createDirectory(at: host.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: target)
+    try fm.createSymbolicLink(at: host, withDestinationURL: target)
+    check(GameFocusTarget.matches(executable: host, bundle: bundle), "focus: checkout host link")
+    check(GameFocusTarget.matches(executable: target, bundle: bundle), "focus: resolved checkout host")
+    check(GameFocusTarget.matches(executable: bundle.appendingPathComponent("Contents/MacOS/bbgpu-host-macos27"), bundle: bundle), "focus: macOS 27 host")
+    check(!GameFocusTarget.matches(executable: root.appendingPathComponent("another/out/bbgpu-host"), bundle: bundle), "focus: another checkout stays untouched")
+    check(!GameFocusTarget.matches(executable: bundle.appendingPathComponent("Contents/MacOS/Bloodborne"), bundle: bundle), "focus: launcher is not a GPU host")
+} catch { check(false, "focus paths: \(error)") }
 
 if failures > 0 {
     print("FAIL: launcher model, \(failures) failed")

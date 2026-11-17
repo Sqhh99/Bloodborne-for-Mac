@@ -179,12 +179,13 @@ if (APPLE)
     # bbport: one-frame Metal GPU capture (shim/bbport_gpu_capture.h).
     enable_language(OBJCXX)
     target_sources(bbgpu PRIVATE shim/bbport_gpu_capture.mm)
+    target_sources(bbgpu PRIVATE shim/bbport_cursor.mm)
     # MetalFX temporal upscaling on native textures (shim/bbport_metalfx.h), used by the upscaler.
     target_sources(bbgpu PRIVATE shim/bbport_metalfx.mm)
     # The settings overlay's Metal side and ImGui's Metal backend (both ARC).
     target_sources(bbgpu PRIVATE shim/bbport_overlay_metal.mm
                    third_party/imgui/backends/imgui_impl_metal.mm)
-    set_source_files_properties(shim/bbport_gpu_capture.mm shim/bbport_metalfx.mm
+    set_source_files_properties(shim/bbport_gpu_capture.mm shim/bbport_cursor.mm shim/bbport_metalfx.mm
                                 shim/bbport_overlay_metal.mm
                                 third_party/imgui/backends/imgui_impl_metal.mm
                                 PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
@@ -258,7 +259,7 @@ if (APPLE)
     list(REMOVE_ITEM METAL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_object.cpp ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_buffer.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_buffer_barriers.cpp ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_compiled_shader.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_counters.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_device.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_draw_core.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_encoder.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_order.cpp ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_depth_stencil.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_present.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_render_pipeline.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_scale.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_specialize.cpp ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_texture.mm ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/mtl_timeline.cpp ${CMAKE_CURRENT_SOURCE_DIR}/shadps4/video_core/renderer_metal/vk_to_mtl.mm)
     target_sources(bbgpu PRIVATE ${METAL_SOURCES})
     target_link_libraries(bbgpu PRIVATE bbmetal_core "-framework Metal" "-framework QuartzCore"
-        "-framework CoreGraphics" "-framework ColorSync" "-framework ImageIO" "-framework Foundation")
+        "-framework CoreGraphics" "-framework ColorSync" "-framework ImageIO" "-framework Foundation" "-framework AppKit")
     foreach(source IN LISTS METAL_SOURCES)
         if (source MATCHES "\\.mm$")
             set_source_files_properties(${source} PROPERTIES COMPILE_OPTIONS
@@ -446,3 +447,28 @@ target_include_directories(index-offset-test PRIVATE shim shadps4 third_party/gc
 target_compile_options(index-offset-test PRIVATE -UNDEBUG)
 target_link_libraries(index-offset-test PRIVATE bbgpu "-framework Metal" "-framework Foundation")
 target_link_options(index-offset-test PRIVATE -Wl,-export_dynamic)
+
+# Validate the production submission and upload boundaries without starting a GPU.
+add_executable(gnm-submit-validation-test EXCLUDE_FROM_ALL ../tests/test_gnm_submit_validation.cpp)
+target_include_directories(gnm-submit-validation-test PRIVATE shim)
+target_compile_options(gnm-submit-validation-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+add_executable(gnm-submit-api-test EXCLUDE_FROM_ALL ../tests/test_gnm_submit_api.cpp ../tests/test_gpu_runtime_stubs.cpp)
+target_include_directories(gnm-submit-api-test PRIVATE shim shadps4 third_party/gcn/include)
+target_link_libraries(gnm-submit-api-test PRIVATE bbgpu)
+target_compile_options(gnm-submit-api-test PRIVATE -UNDEBUG)
+if (APPLE)
+    target_link_options(gnm-submit-api-test PRIVATE -Wl,-export_dynamic)
+endif()
+add_executable(upload-reservation-test EXCLUDE_FROM_ALL ../tests/test_upload_reservation.cpp)
+target_include_directories(upload-reservation-test PRIVATE shim)
+target_compile_options(upload-reservation-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+
+if (APPLE)
+    add_executable(metalfx-test EXCLUDE_FROM_ALL ../tests/test_metalfx.mm shim/bbport_metalfx.mm
+        shim/common/logging/log.cpp shim/common/assert.cpp)
+    target_include_directories(metalfx-test PRIVATE shim shadps4)
+    target_compile_options(metalfx-test PRIVATE -UNDEBUG -Wall -Wextra -Werror)
+    target_link_libraries(metalfx-test PRIVATE bbmetal_core fmt::fmt
+        "-framework Metal" "-framework MetalFX" "-framework Foundation")
+    set_source_files_properties(../tests/test_metalfx.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+endif()

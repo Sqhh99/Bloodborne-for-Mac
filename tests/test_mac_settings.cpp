@@ -113,6 +113,14 @@ int main() {
     assert(BbSettings::Get().upscaler == BbSettings::UpscalerFsr3);
     assert(Count(Read(config), "upscaler=fsr3") == 1);
 
+    // The game's native settings bridge offers and saves Spatial independently of temporal.
+    BbSettings::ConfigureUpscalerSupport(true, true, true);
+    assert(Get(BBMAC_PROVIDER_MASK) & (1 << BbSettings::UpscalerSpatial));
+    assert(Set(BBMAC_UPSCALER, BbSettings::UpscalerSpatial));
+    assert(BbSettings::Get().upscaler == BbSettings::UpscalerSpatial);
+    assert(Count(Read(config), "upscaler=metalfx_spatial") == 1);
+    assert(Set(BBMAC_UPSCALER, BbSettings::UpscalerFsr3));
+
     // Startup-only changes report pending, and reverting them clears pending without a restart.
     assert(Get(BBMAC_RESTART_NEEDED) == 0);
     const int launch_fields[] = {BBMAC_FRAME_CAP, BBMAC_GAME_TIMING, BBMAC_FULLSCREEN,
