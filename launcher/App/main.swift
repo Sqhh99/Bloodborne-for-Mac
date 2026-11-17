@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var model: LauncherModel!
     private var window: NSWindow?
     private var quitAfterStop = false
+    private let gameFocus = GameFocus()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let layout = Layout.detect(bundleURL: Bundle.main.bundleURL,
@@ -24,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         model.onStarted = { [weak self] in
             ModsWindow.hide()
             guard let self else { return }
+            self.gameFocus.start()
             if self.model.config.hideWhilePlaying && !self.model.benchmark.isRunning {
                 // Out of the way while the game runs (its settings are locked then), Dock icon
                 // too: the game's window has its own "Bloodborne" icon, and a second one (or ⌘Tab
@@ -51,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func gameEnded(_ status: Int32) {
+        gameFocus.stop()
         if quitAfterStop {
             NSApp.reply(toApplicationShouldTerminate: true)
             return

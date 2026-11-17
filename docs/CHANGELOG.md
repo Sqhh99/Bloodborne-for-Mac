@@ -4,6 +4,8 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- The launcher hands keyboard focus to its game window at startup, including checkout apps
+  whose GPU hosts link into out/. Fullscreen moves to another display retry activation at startup.
 - Text dialogs keep typed keys out of the game, including a held confirming key after the
   overlay closes. Confirmed text drops accidental leading/trailing spaces.
 - GPU submissions validate the whole command batch before publishing work or patching a flip.

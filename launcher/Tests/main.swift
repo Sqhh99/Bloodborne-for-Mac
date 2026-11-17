@@ -1157,6 +1157,25 @@ do {
     }
 }
 
+// Focus follows only this app's GPU host, whether packaged or a checkout symlink.
+do {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("bb-focus-" + UUID().uuidString)
+    defer { try? fm.removeItem(at: root) }
+    let bundle = root.appendingPathComponent("Bloodborne.app")
+    let host = bundle.appendingPathComponent("Contents/MacOS/bbgpu-host")
+    let target = root.appendingPathComponent("out/bbgpu-host")
+    try fm.createDirectory(at: host.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: target)
+    try fm.createSymbolicLink(at: host, withDestinationURL: target)
+    check(GameFocusTarget.matches(executable: host, bundle: bundle), "focus: checkout host link")
+    check(GameFocusTarget.matches(executable: target, bundle: bundle), "focus: resolved checkout host")
+    check(GameFocusTarget.matches(executable: bundle.appendingPathComponent("Contents/MacOS/bbgpu-host-macos27"), bundle: bundle), "focus: macOS 27 host")
+    check(!GameFocusTarget.matches(executable: root.appendingPathComponent("another/out/bbgpu-host"), bundle: bundle), "focus: another checkout stays untouched")
+    check(!GameFocusTarget.matches(executable: bundle.appendingPathComponent("Contents/MacOS/Bloodborne"), bundle: bundle), "focus: launcher is not a GPU host")
+} catch { check(false, "focus paths: \(error)") }
+
 if failures > 0 {
     print("FAIL: launcher model, \(failures) failed")
     exit(1)
