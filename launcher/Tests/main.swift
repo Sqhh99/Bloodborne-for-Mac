@@ -426,11 +426,192 @@ do {
     let signal = CrashReport(status: 139, log: "nothing\nuseful", logName: "game.log", system: mac, settings: [], home: home)
     check(signal.cause == nil && signal.summary == "The game stopped unexpectedly (signal 11)." && signal.report.contains("nothing\nuseful"), "signal status, end of log")
     check(CrashReport.redact("/Users/someone/x and /Users/hunter/y", home: home) == "~/x and ~/y", "other user folders redacted")
+    let ini = "online=1\nthd_online_id=Hunter\nthd_token=abc123.def\nshadnet_password = \"p@ss\"\nthd_token=keychain\nshadnet_token=\nsaves=/Users/hunter/s"
+    check(CrashReport.redact(ini, home: home) == "online=1\nthd_online_id=Hunter\nthd_token=<redacted>\nshadnet_password = \"<redacted>\"\nthd_token=keychain\nshadnet_token=\nsaves=~/s",
+          "online secrets in bbport.ini redacted, keychain and empty kept")
+    check(CrashReport.redact("export BB_THD_TOKEN=xyz BB_SHADNET_PASSWORD=pw", home: home) == "export BB_THD_TOKEN=<redacted> BB_SHADNET_PASSWORD=<redacted>",
+          "online secrets in variables redacted")
 
     let query = URLComponents(url: crash.issueURL, resolvingAgainstBaseURL: false)!.queryItems ?? []
     check(crash.issueURL.absoluteString.hasPrefix("https://github.com/Wooloomooloo2/bloodborne_mac_port/issues/new?"), "issue link")
     check(query.first { $0.name == "title" }?.value == "Crash: the GPU process crashed (signal 11 in Foo)", "issue title")
     check(query.first { $0.name == "body" }?.value?.contains("Apple M4 Max") == true, "issue body has the Mac")
+}
+
+// A keychain that remembers what was stored (the real one is the user's; launch_settings.sh
+// reads the same items with `security find-generic-password`).
+final class FakeSecrets: SecretStore {
+    var items: [String: String] = [:]
+    var failing = false
+    func has(service: String, account: String) -> Bool { items["\(service)/\(account)"] != nil }
+    func store(service: String, account: String, secret: String) throws {
+        if failing { throw HuntersDream.Failure(description: "keychain locked") }
+        items["\(service)/\(account)"] = secret
+    }
+    func remove(service: String, account: String) { items["\(service)/\(account)"] = nil }
+}
+
+// OnlineSettings: the keys scripts/launch_settings.sh reads, round trip, secrets.
+do {
+    let defaults = OnlineSettings(ini: IniFile())
+    check(defaults == OnlineSettings(), "empty ini = defaults")
+    check(!defaults.online && defaults.pool == .huntersdream && defaults.upnp && defaults.p2pPort == 3658, "default online settings")
+    check(defaults.shadnetServer == "" && defaults.shadnetNpid == "" && defaults.shadnetPassword == .none, "default shadNet: nothing")
+    check(defaults.thdOnlineId == "" && defaults.thdToken == .none && !defaults.hasSecretInFile, "default Hunter's Dream: nothing")
+
+    check(!defaults.shadnetAccepted && !defaults.usesShadnet, "shadNet is opt-in")
+    let read = OnlineSettings(ini: IniFile(text: "online=1\nonline_pool=shadnet\nshadnet_insecure_ok=1\nshadnet_server=example.org:31313\nshadnet_npid=hunter\nshadnet_password=keychain\nthd_online_id=dreamer\nthd_token=abc123\nupnp=0\np2p_port=0\ncommunity_server=https://example.org\n"))
+    check(read.online && read.pool == .shadnet && read.shadnetAccepted && read.usesShadnet && read.shadnetServer == "example.org:31313" && read.shadnetNpid == "hunter", "read shadNet keys")
+    check(read.shadnetPassword == .keychain && read.thdOnlineId == "dreamer" && read.thdToken == .inFile("abc123"), "read secrets as stored")
+    check(!read.upnp && read.p2pPort == 0 && read.hasSecretInFile, "read upnp, port, a token in the file")
+    // The shell's rules: flags are exactly 0 or 1; a bad port or pool is ignored.
+    let odd = OnlineSettings(ini: IniFile(text: "online=yes\nupnp=2\np2p_port=70000\nonline_pool=psn\nshadnet_password=\n"))
+    check(!odd.online && odd.upnp && odd.p2pPort == 3658 && odd.pool == .huntersdream && odd.shadnetPassword == .none, "invalid values -> defaults")
+    check(OnlineSettings.port(from: "3658") == 3658 && OnlineSettings.port(from: "0") == 0 && OnlineSettings.port(from: "65535") == 65535, "ports")
+    check(OnlineSettings.port(from: "65536") == nil && OnlineSettings.port(from: "") == nil && OnlineSettings.port(from: "12a") == nil, "bad ports")
+    check(OnlineSettings.port(from: "-1") == nil && OnlineSettings.port(from: "123456") == nil && OnlineSettings.port(from: "٣") == nil, "digits only, five at most")
+    // The pool when the file names none (launch_settings.sh): The Hunter's Dream; shadNet is opt-in.
+    check(OnlineSettings(ini: IniFile(text: "online=1\nshadnet_npid=hunter\n")).pool == .huntersdream, "only a shadNet account: still The Hunter's Dream")
+    let unaccepted = OnlineSettings(ini: IniFile(text: "online_pool=shadnet\nshadnet_insecure_ok=yes\n"))
+    check(unaccepted.pool == .shadnet && !unaccepted.shadnetAccepted && !unaccepted.usesShadnet, "shadNet chosen, warning not accepted")
+    check(OnlineSettings(ini: IniFile(text: "shadnet_npid=hunter\nthd_online_id=dreamer\n")).pool == .huntersdream, "both accounts: The Hunter's Dream")
+    check(OnlineSettings(ini: IniFile(text: "online=1\n")).pool == .huntersdream, "no account: The Hunter's Dream")
+
+    // Round trip: every key written as the shell reads it; other keys and the order kept.
+    var file = IniFile(text: "# header\nupscaler=metalfx\ncommunity_server=https://example.org\nshadnet_webapi=http://example.org:31315\n")
+    var online = read
+    online.shadnetServer = "  "
+    online.apply(to: &file)
+    check(OnlineSettings(ini: file) == OnlineSettings(ini: IniFile(text: file.text)), "written and read back")
+    let back = OnlineSettings(ini: file)
+    check(back.online == read.online && back.pool == read.pool && back.shadnetNpid == read.shadnetNpid, "round trip accounts")
+    check(back.shadnetPassword == .keychain && back.thdToken == .inFile("abc123") && back.thdOnlineId == "dreamer", "round trip secrets unchanged")
+    check(back.upnp == read.upnp && back.p2pPort == read.p2pPort && back.shadnetAccepted, "round trip upnp, port, shadNet opt-in")
+    check(file["online"] == "1" && file["online_pool"] == "shadnet" && file["upnp"] == "0" && file["p2p_port"] == "0", "keys as the shell reads them")
+    check(file["shadnet_server"] == nil && file["shadnet_password"] == "keychain" && file["thd_token"] == "abc123", "blank server removed; secrets as read")
+    check(file["community_server"] == "https://example.org" && file["shadnet_webapi"] == "http://example.org:31315" && file["upscaler"] == "metalfx", "other keys kept")
+    check(file.text.hasPrefix("# header\n"), "header kept")
+    var cleared = online
+    cleared.shadnetNpid = ""
+    cleared.online = false
+    cleared.upnp = true
+    cleared.p2pPort = 65535
+    cleared.shadnetAccepted = false
+    cleared.apply(to: &file)
+    check(file["shadnet_insecure_ok"] == nil, "opt-in withdrawn: key removed")
+    check(file["shadnet_npid"] == nil && file["online"] == "0" && file["upnp"] == "1" && file["p2p_port"] == "65535", "cleared account; flags written explicitly")
+    // The shell reads what the launcher wrote (scripts/launch_settings.sh).
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("launcher-online-\(getpid()).ini")
+    try? file.write(to: url)
+    let bash = Process()
+    bash.executableURL = URL(fileURLWithPath: "/bin/bash")
+    bash.arguments = ["-c", "source scripts/launch_settings.sh && bb_launch_settings \"$1\" && printf '%s %s %s %s %s' \"${BB_ONLINE:--}\" \"${BB_NET_BACKEND:--}\" \"${BB_UPNP:--}\" \"${BB_P2P_PORT:--}\" \"${BB_THD_ONLINE_ID:--}\"", "_", url.path]
+    var environment = ProcessInfo.processInfo.environment
+    for key in ["BB_ONLINE", "BB_NET_BACKEND", "BB_UPNP", "BB_P2P_PORT", "BB_THD_ONLINE_ID", "BB_THD_TOKEN", "BB_SHADNET_NPID"] {
+        environment.removeValue(forKey: key)
+    }
+    environment["BB_KEYCHAIN_TOOL"] = "/usr/bin/false"
+    bash.environment = environment
+    let pipe = Pipe()
+    bash.standardOutput = pipe
+    try? bash.run()
+    bash.waitUntilExit()
+    let sourced = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    check(bash.terminationStatus == 0 && sourced == "- - 1 65535 dreamer", "launch_settings.sh reads the launcher's keys: \(sourced.debugDescription)")
+    try? FileManager.default.removeItem(at: url)
+
+    // Secrets: the password and the token go to the keychain, the file says `keychain`.
+    let secrets = FakeSecrets()
+    var account = OnlineSettings()
+    account.shadnetNpid = " hunter "
+    check(!account.shadnetPasswordStored(secrets: secrets) && !account.signedIn(secrets: secrets), "nothing stored yet")
+    do { try account.storeShadnetPassword("s3cret", secrets: secrets) } catch { check(false, "store password: \(error)") }
+    check(secrets.items["bbport-shadnet/hunter"] == "s3cret" && account.shadnetPassword == .keychain, "password under the trimmed account name")
+    check(account.shadnetPasswordStored(secrets: secrets), "password reported as stored")
+    account.shadnetNpid = "other"
+    check(!account.shadnetPasswordStored(secrets: secrets), "another account: no password")
+    check(OnlineSettings(ini: IniFile(text: "shadnet_npid=x\nshadnet_password=clear\n")).shadnetPasswordStored(secrets: secrets), "a password in the file counts")
+    secrets.failing = true
+    var failed = account
+    do { try failed.storeShadnetPassword("x", secrets: secrets); check(false, "a failing keychain must throw") } catch {}
+    check(failed == account, "a failed store changes nothing")
+    secrets.failing = false
+    account.pool = .shadnet
+    do { try account.signIn(onlineId: "dreamer", token: "tok", secrets: secrets) } catch { check(false, "sign in: \(error)") }
+    check(secrets.items["bbport-huntersdream/dreamer"] == "tok" && account.thdOnlineId == "dreamer" && account.thdToken == .keychain, "token in the keychain")
+    check(account.pool == .huntersdream && account.signedIn(secrets: secrets), "signed in on The Hunter's Dream")
+    var ini = IniFile()
+    account.apply(to: &ini)
+    check(ini["thd_online_id"] == "dreamer" && ini["thd_token"] == "keychain" && ini["online_pool"] == "huntersdream", "what online.py signin --keychain writes")
+    check(OnlineSettings(ini: IniFile(text: "thd_online_id=dreamer\nthd_token=keychain\n")).signedIn(secrets: secrets), "signed in from the file's `keychain`")
+    check(!OnlineSettings(ini: IniFile(text: "thd_online_id=gone\nthd_token=keychain\n")).signedIn(secrets: secrets), "`keychain` without an item: not signed in")
+    check(OnlineSettings(ini: IniFile(text: "thd_online_id=gone\nthd_token=abc\n")).signedIn(secrets: secrets), "a token in the file: signed in")
+    account.signOut(secrets: secrets)
+    check(secrets.items["bbport-huntersdream/dreamer"] == nil && account.thdOnlineId == "" && account.thdToken == .none, "signed out: item and keys gone")
+    check(!account.signedIn(secrets: secrets) && secrets.items["bbport-shadnet/hunter"] == "s3cret", "the shadNet password stays")
+    account.apply(to: &ini)
+    check(ini["thd_online_id"] == nil && ini["thd_token"] == nil, "signed out: no account keys")
+}
+
+// IniFile keeps an owner-only file owner-only (a secret in clear).
+do {
+    let fm = FileManager.default
+    let url = fm.temporaryDirectory.appendingPathComponent("launcher-perms-\(getpid())/bbport.ini")
+    var ini = IniFile(text: "thd_token=abc\n")
+    try? ini.write(to: url)
+    try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    ini["online"] = "1"
+    try? ini.write(to: url)
+    let mode = ((try? fm.attributesOfItem(atPath: url.path))?[.posixPermissions] as? Int) ?? -1
+    check(mode == 0o600 && IniFile(contentsOf: url)["online"] == "1", "permissions kept across an atomic write: \(String(mode, radix: 8))")
+    try? fm.removeItem(at: url.deletingLastPathComponent())
+}
+
+// HuntersDream: the device sign-in protocol (scripts/online.py thd_sign_in).
+do {
+    check((try? HuntersDream.communityAddress(nil)) == "https://thehuntersdream.com" && (try? HuntersDream.communityAddress("  ")) == "https://thehuntersdream.com", "default game server")
+    check((try? HuntersDream.communityAddress("https://example.org:20443/bb-eu/ss.info")) == "https://example.org", "scheme and host only")
+    check((try? HuntersDream.communityAddress("example.org")) == "https://example.org", "scheme added")
+    check((try? HuntersDream.communityAddress("http://localhost:8080/")) == "http://localhost" && (try? HuntersDream.communityAddress("http://127.0.0.1")) == "http://127.0.0.1", "plain http for this Mac")
+    check((try? HuntersDream.communityAddress("http://x.test/")) == nil && (try? HuntersDream.communityAddress("ftp://x.test")) == nil && (try? HuntersDream.communityAddress("https://")) == nil, "plain http elsewhere refused")
+    let community = "https://example.org"
+    check(HuntersDream.onCommunityHost(URL(string: "https://www.example.org/link")!, community: community)
+          && !HuntersDream.onCommunityHost(URL(string: "http://example.org/link")!, community: community)
+          && !HuntersDream.onCommunityHost(URL(string: "https://example.org.evil.test/")!, community: community), "sign-in page on the community host")
+    check(HuntersDream.validOnlineId("dreamer_1") && !HuntersDream.validOnlineId("ab") && !HuntersDream.validOnlineId(String(repeating: "a", count: 17)) && !HuntersDream.validOnlineId("a b\nc"), "online id rule")
+    let start = try! HuntersDream.startRequest(community: community)
+    check(start.url?.absoluteString == "https://example.org/auth/device/start" && start.httpMethod == "POST", "start request")
+    check(start.value(forHTTPHeaderField: "Content-Type") == "application/json", "JSON request")
+    let startBody = start.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] }
+    check(startBody == ["DeviceName": "bbport on macOS"], "the device name, not the hostname")
+    let poll = try! HuntersDream.pollRequest(community: community, deviceCode: "dev-1")
+    let pollBody = poll.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] }
+    check(poll.url?.absoluteString == "https://example.org/auth/device/poll" && pollBody == ["DeviceCode": "dev-1"], "poll request")
+
+    func data(_ json: String) -> Data { Data(json.utf8) }
+    let started = try? HuntersDream.deviceStart(data(#"{"ResKind":0,"DeviceCode":"dev-1","UserCode":"ABCD-EFGH","VerificationUri":"https://example.org/link","Interval":3,"ExpiresIn":120}"#), community: community)
+    check(started == HuntersDream.DeviceStart(deviceCode: "dev-1", userCode: "ABCD-EFGH", page: URL(string: "https://example.org/link")!, interval: 3, expiresIn: 120), "start reply: \(String(describing: started))")
+    let bare = try? HuntersDream.deviceStart(data(#"{"ResKind":0,"DeviceCode":"d","UserCode":"C"}"#), community: community)
+    check(bare?.page.absoluteString == "https://example.org/link" && bare?.interval == 5 && bare?.expiresIn == 600, "start reply defaults")
+    let wild = try? HuntersDream.deviceStart(data(#"{"ResKind":0,"DeviceCode":"d","UserCode":"C","VerificationUri":"https://evil.test/link","Interval":1e300,"ExpiresIn":1e300}"#), community: community)
+    check(wild?.page.absoluteString == "https://example.org/link" && wild?.interval == 60 && wild?.expiresIn == 1800, "foreign page replaced, numbers clamped: \(String(describing: wild))")
+    let fast = try? HuntersDream.deviceStart(data(#"{"ResKind":0,"DeviceCode":"d","UserCode":"C","Interval":0,"ExpiresIn":-5}"#), community: community)
+    check(fast?.interval == 1 && fast?.expiresIn == 0, "numbers clamped from below")
+    check(failure { try HuntersDream.poll(data(#"{"ResKind":0,"Status":"approved","OnlineId":"a\nthd_token=x","Token":"tok"}"#), community: community) } == "the reply has an invalid online id", "approved with an invalid online id")
+    func failure(_ body: () throws -> Any) -> String? {
+        do { _ = try body(); return nil } catch { return (error as? HuntersDream.Failure)?.description ?? "other error" }
+    }
+    check(failure { try HuntersDream.deviceStart(data(#"{"ResKind":0}"#), community: community) } == "no code in the reply", "start without a code")
+    check(failure { try HuntersDream.deviceStart(data(#"{"ResKind":3,"Message":"too many devices"}"#), community: community) } == "too many devices", "refused with a message")
+    check(failure { try HuntersDream.deviceStart(data(#"{"ResKind":1}"#), community: community) } == "refused", "refused without a message")
+    check(failure { try HuntersDream.deviceStart(data("<html>404</html>"), community: community) } == "https://example.org/auth/device/start has no account service", "not an account service")
+    check((try? HuntersDream.poll(data(#"{"ResKind":0,"Status":"pending"}"#), community: community)) == .pending, "poll pending")
+    check((try? HuntersDream.poll(data(#"{"ResKind":0}"#), community: community)) == .pending, "poll without a status: pending")
+    check((try? HuntersDream.poll(data(#"{"ResKind":0,"Status":"slow_down"}"#), community: community)) == .slowDown, "poll slow_down")
+    check((try? HuntersDream.poll(data(#"{"ResKind":0,"Status":"denied"}"#), community: community)) == .denied, "poll denied")
+    check((try? HuntersDream.poll(data(#"{"ResKind":0,"Status":"expired"}"#), community: community)) == .expired, "poll expired")
+    check((try? HuntersDream.poll(data(#"{"ResKind":0,"Status":"approved","OnlineId":"dreamer","Token":"tok"}"#), community: community)) == .approved(onlineId: "dreamer", token: "tok"), "poll approved")
+    check(failure { try HuntersDream.poll(data(#"{"ResKind":0,"Status":"approved","OnlineId":"dreamer"}"#), community: community) } == "no token in the reply", "approved without a token")
 }
 
 // Versions and the GitHub releases check.
@@ -447,8 +628,16 @@ do {
     check(v("0.5.2-5-g0b50589").isNewer(than: v("0.5.2")) && !v("0.5.2").isNewer(than: v("0.5.2-5-g0b50589-dirty")), "checkout build after its tag")
     check(!v("0.5.2").isNewer(than: v("0.5.2-dirty")) && !v("0.5.2-test1").isNewer(than: v("0.5.2-test1")), "dirty tag build; equal")
 
+    check(v("v0.1.0").numbers == [0, 1, 0] && v("v0.1.0").isPlain, "this fork's tags: v<version>")
+    check(Edition.split(tag: "v0.1.0-test1-multiplayer")! == ("v0.1.0-test1", .multiplayer)
+          && Edition.split(tag: "v0.1.0-singleplayer")! == ("v0.1.0", .singleplayer)
+          && Edition.split(tag: "v0.1.0") == nil && Edition.split(tag: "mac-v0.5.2") == nil, "edition tags")
+    check(Edition.detect(info: ["BBEdition": "singleplayer"]) { true } == .singleplayer
+          && Edition.detect(info: [:]) { true } == .multiplayer && Edition.detect(info: [:]) { false } == .singleplayer,
+          "edition from Info.plist, else from the online module")
+
     func release(_ tag: String, draft: Bool = false, prerelease: Bool = false, asset: String? = nil) -> String {
-        let name = asset ?? "Bloodborne-macOS-\(tag.dropFirst(5)).zip"
+        let name = asset ?? "Bloodborne-macOS-\(tag.dropFirst(1)).zip"
         return """
         {"tag_name":"\(tag)","name":"\(tag): notes","body":"**Fixed** things","draft":\(draft),"prerelease":\(prerelease),
          "html_url":"https://github.com/o/r/releases/tag/\(tag)",
@@ -457,39 +646,53 @@ do {
         """
     }
     // The API's order: newest published first; 0.5.2 was published after its fix releases.
-    let json = Data(("[" + [release("mac-v0.5.2.2", prerelease: true), release("mac-v0.6.0-test1"),
-                            release("mac-v0.7.0", draft: true), release("mac-v0.9.0", asset: "Other.zip"), release("v1.0"),
-                            release("mac-v0.5.2"), release("mac-v0.5.2.1", prerelease: true), release("mac-v0.4.0")]
-        .joined(separator: ",") + "]").utf8)
+    // Every release has a single-player twin (not 0.8.0 and 0.9.1, whose zip is the other
+    // edition's), and upstream's
+    // mac-v tags and tags without an edition are not this app's.
+    let mp = [release("v0.5.2.2-multiplayer", prerelease: true), release("v0.6.0-test1-multiplayer"),
+              release("v0.7.0-multiplayer", draft: true), release("v0.9.0-multiplayer", asset: "Other.zip"),
+              release("v0.9.1-multiplayer", asset: "Bloodborne-macOS-0.9.1-singleplayer.zip"),
+              release("mac-v1.0"), release("v1.1"), release("v0.8.0-multiplayer"),
+              release("v0.5.2-multiplayer"), release("v0.5.2.1-multiplayer", prerelease: true), release("v0.4.0-multiplayer")]
+    let sp = mp.map { $0.replacingOccurrences(of: "-multiplayer", with: "-singleplayer") }.filter { !$0.contains("v0.8.0") && !$0.contains("v0.9.1") }
+    let json = Data(("[" + (mp + sp).joined(separator: ",") + "]").utf8)
     // Pre-releases (GitHub's flag: 0.5.2.1, 0.5.2.2) and test tags (0.6.0-test1) are test builds.
-    let all = (try? Updates.releases(json: json, includeTestBuilds: false)) ?? []
-    check(all.map(\.tag) == ["mac-v0.5.2", "mac-v0.4.0"], "full releases only, newest version first: \(all.map(\.tag))")
-    check(all.first?.zip.absoluteString == "https://x/Bloodborne-macOS-0.5.2.zip" && all.first?.size == 51225450, "the app's zip, not pkg_extract")
-    check(all.first?.digest == "sha256:ab" && all.first?.title == "mac-v0.5.2: notes" && all.first?.notes == "**Fixed** things", "release details")
+    let all = (try? Updates.releases(json: json, includeTestBuilds: false, edition: .multiplayer)) ?? []
+    check(all.map(\.tag) == ["v0.8.0-multiplayer", "v0.5.2-multiplayer", "v0.4.0-multiplayer"], "full releases of the edition only, newest version first: \(all.map(\.tag))")
+    check(all[1].zip.absoluteString == "https://x/Bloodborne-macOS-0.5.2-multiplayer.zip" && all[1].size == 51225450, "the edition's zip, not pkg_extract")
+    check(all[1].digest == "sha256:ab" && all[1].title == "v0.5.2-multiplayer: notes" && all[1].notes == "**Fixed** things"
+          && all[1].version.text == "0.5.2", "release details")
     check(all.allSatisfy { !$0.isTestBuild }, "full releases are not test builds")
-    let tests = (try? Updates.releases(json: json, includeTestBuilds: true)) ?? []
-    check(tests.map(\.tag) == ["mac-v0.6.0-test1", "mac-v0.5.2.2", "mac-v0.5.2.1", "mac-v0.5.2", "mac-v0.4.0"], "test builds when asked: \(tests.map(\.tag))")
-    check(tests.prefix(3).allSatisfy(\.isTestBuild), "pre-releases and test tags marked")
-    func newest(_ current: String?, tests: Bool = false, skipping: String? = nil) -> String? {
-        (try? Updates.newest(json: json, current: current.flatMap(ReleaseVersion.init), includeTestBuilds: tests, skipping: skipping))??.tag
+    let single = (try? Updates.releases(json: json, includeTestBuilds: false, edition: .singleplayer)) ?? []
+    check(single.map(\.tag) == ["v0.5.2-singleplayer", "v0.4.0-singleplayer"], "single-player releases: \(single.map(\.tag))")
+    let tests = (try? Updates.releases(json: json, includeTestBuilds: true, edition: .multiplayer)) ?? []
+    check(tests.map(\.tag) == ["v0.8.0-multiplayer", "v0.6.0-test1-multiplayer", "v0.5.2.2-multiplayer", "v0.5.2.1-multiplayer",
+                               "v0.5.2-multiplayer", "v0.4.0-multiplayer"], "test builds when asked: \(tests.map(\.tag))")
+    check(tests[1...3].allSatisfy(\.isTestBuild), "pre-releases and test tags marked")
+    func newest(_ current: String?, tests: Bool = false, skipping: String? = nil, edition: Edition = .singleplayer) -> String? {
+        (try? Updates.newest(json: json, current: current.flatMap(ReleaseVersion.init), includeTestBuilds: tests,
+                             edition: edition, skipping: skipping))??.tag
     }
-    check(newest("0.4.0") == "mac-v0.5.2", "newer release offered")
+    check(newest("0.4.0") == "v0.5.2-singleplayer", "newer release offered")
     check(newest("0.5.2") == nil, "up to date: the 0.5.2.x pre-releases are not offered by default")
-    check(newest("0.5.2", tests: true) == "mac-v0.6.0-test1", "pre-releases and test builds when asked")
-    check(newest("0.5.2-test1") == "mac-v0.5.2", "a test build is offered its release")
-    check(newest("0.5.2-5-g0b50589") == nil && newest("0.5.2-5-g0b50589", tests: true) == "mac-v0.6.0-test1", "checkout build: only later releases")
+    check(newest("0.5.2", edition: .multiplayer) == "v0.8.0-multiplayer", "each edition its own releases")
+    check(newest("0.5.2", tests: true) == "v0.6.0-test1-singleplayer", "pre-releases and test builds when asked")
+    check(newest("0.5.2-test1") == "v0.5.2-singleplayer", "a test build is offered its release")
+    check(newest("0.5.2-5-g0b50589") == nil && newest("0.5.2-5-g0b50589", tests: true) == "v0.6.0-test1-singleplayer", "checkout build: only later releases")
     check(newest("0.4.0", skipping: "0.5.2") == nil, "skipped version")
-    check(newest(nil) == "mac-v0.5.2", "dev build: newest release")
-    check((try? Updates.releases(json: Data("{\"message\":\"rate limited\"}".utf8), includeTestBuilds: false)) == nil, "API error is an error")
+    check(newest(nil) == "v0.5.2-singleplayer", "dev build: newest release")
+    check((try? Updates.releases(json: Data("{\"message\":\"rate limited\"}".utf8), includeTestBuilds: false, edition: .singleplayer)) == nil, "API error is an error")
 
     let now = Date(timeIntervalSince1970: 2_000_000_000)
     check(Updates.isDue(last: nil, now: now) && Updates.isDue(last: now - Updates.interval, now: now), "due")
     check(!Updates.isDue(last: now - 3600, now: now) && Updates.isDue(last: now + 3600, now: now), "not due; clock set back")
 
-    let info: [String: Any] = ["CFBundleIdentifier": Updates.bundleIdentifier, "CFBundleVersion": "0.5.2.2"]
-    check(Updates.unpackedProblem(info: info, expected: v("0.5.2.2")) == nil, "unpacked app accepted")
-    check(Updates.unpackedProblem(info: info, expected: v("0.5.3")) != nil, "wrong version refused")
-    check(Updates.unpackedProblem(info: ["CFBundleIdentifier": "com.example", "CFBundleVersion": "0.5.2.2"], expected: v("0.5.2.2")) != nil, "other app refused")
+    let info: [String: Any] = ["CFBundleIdentifier": Updates.bundleIdentifier, "CFBundleVersion": "0.5.2.2", "BBEdition": "multiplayer"]
+    check(Updates.unpackedProblem(info: info, expected: v("0.5.2.2"), edition: .multiplayer) == nil, "unpacked app accepted")
+    check(Updates.unpackedProblem(info: info, expected: v("0.5.3"), edition: .multiplayer) != nil, "wrong version refused")
+    check(Updates.unpackedProblem(info: info, expected: v("0.5.2.2"), edition: .singleplayer) != nil, "other edition refused")
+    check(Updates.unpackedProblem(info: ["CFBundleIdentifier": "com.example", "CFBundleVersion": "0.5.2.2", "BBEdition": "multiplayer"],
+                                  expected: v("0.5.2.2"), edition: .multiplayer) != nil, "other app refused")
 
     let fm = FileManager.default
     let root = fm.temporaryDirectory.appendingPathComponent("launcher-update-\(getpid())")
@@ -868,7 +1071,7 @@ do {
     let list = try? PatchList.decode("""
     {"cheats": [{"name": "No Rally Decay", "group": "Gameplay", "label": "Rally doesn't decay", "exclusive": "rally", "note": "n"},
                 {"name": "Disable Rally (HP Regain)", "group": "Gameplay", "label": "No rally", "exclusive": "rally", "note": ""},
-                {"name": "Player No Dead (Read note)", "group": "Cheats", "label": "Player can't die", "exclusive": null, "note": "a\\nb"},
+                {"name": "Player No Dead (Read note)", "group": "Cheats", "label": "Player can't die", "exclusive": null, "note": "a\\nb", "online_off": true},
                 {"name": "Increased camera distance", "group": "Camera", "label": "Camera further away", "exclusive": null, "note": ""}],
      "external": [{"key": "x.xml/Fast", "file": "x.xml", "name": "Fast", "author": "me", "note": "", "enabled": true},
                   {"key": "x.xml/None", "file": "x.xml", "name": null, "author": "", "note": "", "enabled": false}]}
@@ -877,6 +1080,10 @@ do {
     check(cheats.count == 4 && cheats[0].exclusive == "rally" && cheats[2].exclusive == nil && cheats[2].note == "a\nb", "cheats list")
     check(list?.external.count == 2 && list?.external[1].name == nil && list?.external[0].enabled == true, "external patches")
     check(Cheats.grouped(cheats).map(\.group) == ["Cheats", "Gameplay", "Camera"], "group order")
+    check(cheats[2].onlineOff && !cheats[3].onlineOff, "online_off (absent: false)")
+    check(Cheats.summary(mods: 1, cheats: 2, online: true) == "1 mod · 2 cheats on (mods and cheats off online)"
+          && Cheats.summary(mods: 1, cheats: 0, online: true) == "1 mod on (mods off online)"
+          && Cheats.summary(mods: 0, cheats: 1, online: true) == "1 cheat on (cheats off online)", "summary during online play")
 
     // Exclusive groups: one of rally at a time; others untouched.
     var on = Cheats.toggle("No Rally Decay", on: true, in: ["Increased camera distance"], cheats: cheats)
@@ -1204,4 +1411,4 @@ if failures > 0 {
     print("FAIL: launcher model, \(failures) failed")
     exit(1)
 }
-print("PASS: launcher model (ini, resolutions, settings, launch.conf, saves, launch plan, crash report, updates, session logs, native crashes, benchmark, mods and cheats, controls, languages)")
+print("PASS: launcher model (ini, resolutions, settings, launch.conf, saves, launch plan, crash report, updates, session logs, native crashes, benchmark, mods and cheats, controls, languages, online, sign-in)")

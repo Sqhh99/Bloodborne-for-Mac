@@ -1,0 +1,95 @@
+# Builds the port on Apple Silicon and packages both editions (docs/RELEASES.md):
+#   Bloodborne-macOS-<version>-singleplayer.zip   no online module
+#   Bloodborne-macOS-<version>-multiplayer.zip    with the online module (libbbnet.dylib)
+# Runs on pushes to master, on pull requests and by hand (artifacts kept 14 days); release.yml
+# calls it with the release's version and publishes the zips.
+name: Build
+
+on:
+  push:
+    branches: [master]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Version written into the apps and their zip names (0.1.0, 0.1.1-test1)
+        type: string
+        required: true
+
+concurrency:
+  group: build-${{ github.workflow_ref }}-${{ inputs.version || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Tools and Rosetta 2
+        run: |
+          brew install cmake ninja nasm glslang pkgconf boost
+          arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+
+      # deps/ takes about an hour to build from scratch (FFmpeg, SDL, OpenSSL, protobuf...).
+      - name: Dependency cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-${{ runner.os }}-${{ hashFiles('scripts/macos/bootstrap_deps.sh') }}-py20260924
+
+      - name: Dependencies (x86-64 with the online module's libraries, and arm64)
+        run: |
+          bash scripts/macos/bootstrap_deps.sh
+          BB_DEPS_ARCH=arm64 bash scripts/macos/bootstrap_deps.sh
+
+      - name: Build
+        run: |
+          bash build_macos.sh 2>&1 | tee build.log
+          grep -q '^Online module: ' build.log || { echo '::error::the online module was not built'; exit 1; }
+          test -f out/gpu/libbbnet.dylib
+
+      # The launcher's tests need no GPU: they must pass.
+      - name: Launcher tests
+        run: bash scripts/macos/build_launcher.sh --test
+
+      # Informational: the runner is a VM (its GPU and Rosetta differ from a real Mac).
+      - name: Port tests
+        continue-on-error: true
+        run: bash build_macos.sh --test
+
+      - name: Package both editions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          version=${VERSION:-dev-$(git rev-parse --short HEAD)}
+          for edition in singleplayer multiplayer; do
+              BB_EDITION=$edition bash scripts/macos/package_app.sh "$version"
+              # The zip holds the app; package_app.sh replaces dist/Bloodborne.app each time.
+              test -f "dist/Bloodborne-macOS-$version-$edition.zip"
+          done
+          # The single-player zip must not carry the online module, the multiplayer one must.
+          check() { unzip -l "dist/Bloodborne-macOS-$version-$1.zip" | grep -c 'Frameworks/libbbnet.dylib' || true; }
+          [[ $(check singleplayer) == 0 && $(check multiplayer) == 1 ]] || { echo '::error::editions packaged wrongly'; exit 1; }
+          bash tools/pkg_extract/build_release.sh dist/pkg_extract
+          (cd dist && ditto -c -k pkg_extract pkg_extract-macOS.zip)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bloodborne-macOS
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            dist/Bloodborne-macOS-*-singleplayer.zip
+            dist/Bloodborne-macOS-*-multiplayer.zip
+            dist/pkg_extract-macOS.zip

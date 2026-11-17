@@ -1,0 +1,91 @@
+# Publishes a version as two GitHub releases from one build (docs/RELEASES.md):
+#   v<version>-singleplayer   Bloodborne-macOS-<version>-singleplayer.zip (marked Latest)
+#   v<version>-multiplayer    Bloodborne-macOS-<version>-multiplayer.zip
+# Start it by pushing a tag v<version> (git tag v0.1.0 && git push origin v0.1.0), or from the
+# Actions tab with the version (the release tags then point at the chosen branch's commit).
+# A version with a suffix (0.1.1-test1) is published as a pre-release. Release notes come from
+# docs/releases/v<version>.md when it exists.
+name: Release
+
+on:
+  push:
+    tags: ['v*', '!v*-singleplayer', '!v*-multiplayer']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, without the v (0.1.0)
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        env:
+          INPUT: ${{ inputs.version }}
+        run: |
+          if [[ $GITHUB_EVENT_NAME == push ]]; then version=${GITHUB_REF_NAME#v}; else version=${INPUT#v}; fi
+          [[ $version =~ ^[0-9]+(\.[0-9]+)+(-[A-Za-z0-9.]+)?$ && $version != *-singleplayer && $version != *-multiplayer ]] ||
+              { echo "::error::not a version: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs/releases
+      - uses: actions/download-artifact@v4
+        with:
+          name: Bloodborne-macOS
+          path: dist
+      - name: Two releases, one per edition
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          prerelease=()
+          [[ $VERSION == *-* ]] && prerelease=(--prerelease)
+          notes_file=docs/releases/v$VERSION.md
+          # Multiplayer first, so the single-player release (published last) is the Latest one.
+          for edition in multiplayer singleplayer; do
+              tag=v$VERSION-$edition
+              if [[ $edition == multiplayer ]]; then
+                  title="Bloodborne for Mac $VERSION (Multiplayer)"
+                  intro="**Multiplayer edition**: everything in the single-player edition plus online play (messages, bloodstains, bells and summons through The Hunter's Dream or shadNet), set up on the launcher's **Online** tab. It includes GPL-3.0-or-later code (the online module); see docs/ONLINE.md and docs/ONLINE_PROVENANCE.md. Off until you turn it on."
+              else
+                  title="Bloodborne for Mac $VERSION (Single-player)"
+                  intro="**Single-player edition**: no online module and no Online tab; the game never connects to the network. Choose the multiplayer release (tag v$VERSION-multiplayer) to play online."
+              fi
+              {
+                  echo "$intro"
+                  echo
+                  echo "Download \`Bloodborne-macOS-$VERSION-$edition.zip\`. It needs an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own decrypted copy of the game (CUSA03173 v1.09). The app is not notarised: after unzipping, run \`xattr -dr com.apple.quarantine Bloodborne.app\`. Setup: README.md."
+                  echo
+                  if [[ -f $notes_file ]]; then cat "$notes_file"; else echo "Changes: docs/CHANGELOG.md."; fi
+              } > "notes-$edition.md"
+              latest=(--latest=false)
+              [[ $edition == singleplayer && ${#prerelease[@]} == 0 ]] && latest=(--latest)
+              if gh release view "$tag" >/dev/null 2>&1; then
+                  gh release upload "$tag" "dist/Bloodborne-macOS-$VERSION-$edition.zip" dist/pkg_extract-macOS.zip --clobber
+              else
+                  gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file "notes-$edition.md" \
+                      "${prerelease[@]}" "${latest[@]}" \
+                      "dist/Bloodborne-macOS-$VERSION-$edition.zip" dist/pkg_extract-macOS.zip
+              fi
+          done

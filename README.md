@@ -5,9 +5,13 @@ runs directly under **Rosetta 2**, a small HLE runtime in C replaces the PS4 sys
 and a **shadPS4-derived video core** draws through **native Metal** in a separate arm64 process.
 It is not an emulator and contains no game code.
 
-This repository is a fork of
+This project is based on
 [Wooloomooloo2/bloodborne_mac_port](https://github.com/Wooloomooloo2/bloodborne_mac_port)
-(0.5.15) with a different keyboard layout, a launcher in three languages and a faster start.
+(forked at 0.5.15, with its online-play branch `release-0.7` merged in) and incorporates code
+from [bloodborne-native/bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac)
+(the mouse in menus, key prompts and parts of the keyboard layout). It adds Dark Souls III-style
+controls, a launcher in three languages, a faster start and online play, and is released in a
+**single-player** and a **multiplayer** edition ([Downloads](#downloads)).
 
 > **No game files or copyrighted assets are included, and none will ever be distributed.**
 > You must provide your own legally dumped and decrypted copy of Bloodborne (CUSA03173 v1.09).
@@ -70,6 +74,36 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   did anything. `run.sh` now builds only when a source file changed (`BB_BUILD=always` /
   `never`), and keeps the prepared game image between starts (`BB_PREPARE_CACHE=0` turns that
   off; about 1 s, release app included). Measurements: `docs/FINDINGS.md`.
+- **Online play, on its own launcher tab (multiplayer edition).** Upstream's online module (branch `release-0.7`:
+  shadPS4 v0.20.0's network and PSN libraries plus The Hunter's Dream backend from bbhost) is
+  merged in and built by `bootstrap_deps.sh` + `build_macos.sh` as `out/gpu/libbbnet.dylib`. The
+  launcher's **Online** tab turns it on and holds the pool (The Hunter's Dream with a Discord
+  sign-in, or a shadNet account), UPnP and the co-op port. Off by default; with it off the game
+  never touches the network, and mods, cheats and patch files are switched off while it is on.
+  Setup and troubleshooting: [docs/ONLINE.md](docs/ONLINE.md). The single-player edition leaves
+  the module and the tab out.
+- **Two editions per release** from one CI build (`.github/workflows/build.yml`,
+  `release.yml`): single-player and multiplayer, each updating from its own releases.
+
+## Downloads
+
+Each version is published as two GitHub [releases](https://github.com/Sqhh99/Bloodborne-for-Mac/releases)
+built from the same commit:
+
+| Edition | Release tag | Download | Online play |
+|---|---|---|---|
+| **Single-player** (Latest) | `v0.1.0-singleplayer` | `Bloodborne-macOS-0.1.0-singleplayer.zip` | none: no online module, no **Online** tab, the game never connects |
+| **Multiplayer** | `v0.1.0-multiplayer` | `Bloodborne-macOS-0.1.0-multiplayer.zip` | messages, bloodstains, bells and summons through The Hunter's Dream or shadNet ([docs/ONLINE.md](docs/ONLINE.md)) |
+
+Both need an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own game
+(below). The apps are not notarised: unzip, move `Bloodborne.app` to Applications, run
+`xattr -dr com.apple.quarantine /Applications/Bloodborne.app`, open it and choose your game
+folder under **Locations**. Each app updates itself from its own edition's releases only
+(**Bloodborne → Check for Updates…**). Both editions share saves and settings, so you can switch
+between them. The multiplayer edition includes GPL-3.0-or-later code
+([docs/ONLINE_PROVENANCE.md](docs/ONLINE_PROVENANCE.md)).
+
+How releases are built and published: [docs/RELEASES.md](docs/RELEASES.md).
 
 ## Getting the game running
 
@@ -77,11 +111,9 @@ You need an unpacked, decrypted `CUSA03173` folder with update 1.09 merged in an
 `eboot.bin` (a pre-patched one is rejected). [docs/USAGE.md](docs/USAGE.md) explains how to make
 one from PKG files.
 
-**Ready-made app.** Upstream publishes `Bloodborne-macOS-<version>.zip` on its
-[releases page](https://github.com/Wooloomooloo2/bloodborne_mac_port/releases); those builds do
-not contain this fork's changes. Unzip it, run
-`xattr -dr com.apple.quarantine /Applications/Bloodborne.app`, open it and choose your game
-folder under **Locations**.
+**Ready-made app.** Download an edition from this project's releases ([Downloads](#downloads)).
+Upstream's own builds ([bloodborne_mac_port releases](https://github.com/Wooloomooloo2/bloodborne_mac_port/releases))
+do not contain this project's changes.
 
 **From this fork (build it).** Requirements: Rosetta 2 (`softwareupdate --install-rosetta`),
 Xcode Command Line Tools, Python 3 and
@@ -90,7 +122,7 @@ Xcode Command Line Tools, Python 3 and
 ```sh
 git clone --recursive https://github.com/Sqhh99/Bloodborne-for-Mac.git
 cd Bloodborne-for-Mac
-bash scripts/macos/bootstrap_deps.sh                       # x86-64 dependencies (once)
+bash scripts/macos/bootstrap_deps.sh                       # x86-64 dependencies, online module's included (once)
 BB_DEPS_ARCH=arm64 bash scripts/macos/bootstrap_deps.sh    # arm64 dependencies (once)
 bash build_macos.sh                                        # the game process and the GPU host
 bash scripts/macos/make_app.sh                             # Bloodborne.app for this checkout
@@ -153,13 +185,24 @@ in the game's own menu, ⌃⌘F toggles full screen, and ⌘ gives the mouse cur
 | `scripts/macos/make_app.sh` | Builds `Bloodborne.app`, a launcher without a Terminal window (local, not committed) |
 | `scripts/macos/package_app.sh` | Builds the self-contained `dist/Bloodborne.app` and its zip for releases (CI: `.github/workflows/macos-release.yml`) |
 | `Saves` | Shortcut to the save folder (created on first launch, not committed) |
-| `launcher/` | The macOS launcher window (Swift: `Model/` with tests, `App/`; built by `scripts/macos/build_launcher.sh`) |
+| `launcher/` | The macOS launcher window (Swift: `Model/` with tests, `App/`; built by `scripts/macos/build_launcher.sh`; the Online tab writes the keys `scripts/launch_settings.sh` reads) |
 | `tools/` | Developer utilities, including `pkg_extract` (fpkg unpacker) |
 | `docs/` | macOS plan and backlog, plus technical notes inherited from upstream |
 
 ## Credits
 
 This port stands entirely on the work of others:
+
+- **Wooloomooloo2 (Mark Hall) and the bloodborne_mac_port contributors** —
+  [bloodborne_mac_port](https://github.com/Wooloomooloo2/bloodborne_mac_port), the macOS port
+  this project is based on: the Rosetta 2 runtime, the native Metal renderer, the launcher, the
+  release packaging and the online-play branch (`release-0.7`, from upstream PRs #9 and #78).
+- **[bloodborne-native/bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac)**
+  (and its bloodborne-runtime) — the menu pointer, the button prompts for the device in use and
+  the keyboard Circle/dodge handling, ported here with credits in each file
+  ([docs/DESIGN_INPUT.md](docs/DESIGN_INPUT.md)).
+- **Supermedo**, **droogie (bbhost)** and **shadPS4's shadNet** — the online module's backends
+  ([docs/ONLINE_PROVENANCE.md](docs/ONLINE_PROVENANCE.md)).
 
 - **deadinside28** — author of `bbport`, the original native Linux port of Bloodborne: the flat memory image approach, the HLE
   runtime, the two-stage Vulkan draw pipeline, synthetic motion vectors and the upscaler
@@ -204,4 +247,5 @@ Each third-party component keeps its own license file in its directory.
 GNU General Public License v2.0 or later (GPL-2.0-or-later), because of the shadPS4
 components. See [LICENSE](LICENSE). The native-menu adapters retain GPL-3.0-or-later;
 the combined runtime containing them is GPL-3.0-or-later. See
-[the retained license](LICENSES/GPL-3.0-or-later.txt).
+[the retained license](LICENSES/GPL-3.0-or-later.txt). The online module (`gpu/bbnet`, only in
+the multiplayer edition) includes droogie/bbhost's GPL-3.0-or-later code.

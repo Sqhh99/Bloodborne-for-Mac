@@ -12,7 +12,7 @@ struct ReleaseUpdate: Equatable {
     var size: Int64
     /// "sha256:<hex>" when GitHub recorded one.
     var digest: String?
-    /// A pre-release on GitHub or a test tag (mac-v0.5.2-test1): offered only with "Include test builds".
+    /// A pre-release on GitHub or a test tag (v0.1.1-test1-multiplayer): offered only with "Include test builds".
     var isTestBuild = false
 }
 
@@ -48,18 +48,21 @@ enum Updates {
         var assets: [Asset]
     }
 
-    /// The API's releases newest version first, without drafts, tags that are not
-    /// mac-v<numbers>, releases without the app's zip and (unless asked for) test builds: GitHub
+    /// The API's releases of `edition` newest version first, without drafts, tags that are not
+    /// v<numbers>[-test<n>]-<edition>, releases without that edition's zip
+    /// (Bloodborne-macOS-<version>-<edition>.zip) and (unless asked for) test builds: GitHub
     /// pre-releases (each release is published as full or pre-release on purpose) and test tags.
-    static func releases(json: Data, includeTestBuilds: Bool) throws -> [ReleaseUpdate] {
+    static func releases(json: Data, includeTestBuilds: Bool, edition: Edition) throws -> [ReleaseUpdate] {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         let found = try decoder.decode([Payload].self, from: json).compactMap { r -> ReleaseUpdate? in
-            guard r.draft != true, r.tagName.hasPrefix("mac-v"), let version = ReleaseVersion(r.tagName) else { return nil }
+            guard r.draft != true, let split = Edition.split(tag: r.tagName), split.edition == edition,
+                  split.version.hasPrefix("v"), let version = ReleaseVersion(split.version) else { return nil }
             let isTestBuild = r.prerelease == true || !version.isPlain
             guard includeTestBuilds || !isTestBuild,
                   let asset = r.assets.first(where: {
-                      $0.name.hasPrefix("Bloodborne-macOS-") && $0.name.hasSuffix(".zip") && ($0.state ?? "uploaded") == "uploaded"
+                      $0.name.hasPrefix("Bloodborne-macOS-") && $0.name.hasSuffix("\(edition.tagSuffix).zip")
+                          && ($0.state ?? "uploaded") == "uploaded"
                   }) else { return nil }
             let title = r.name.flatMap { $0.isEmpty ? nil : $0 } ?? r.tagName
             return ReleaseUpdate(version: version, tag: r.tagName, title: title, notes: r.body ?? "",
@@ -75,9 +78,9 @@ enum Updates {
 
     /// The release to offer over `current` (nil: up to date). `skipping`: a version the player
     /// chose to skip; still offered by a check they ask for.
-    static func newest(json: Data, current: ReleaseVersion?, includeTestBuilds: Bool,
+    static func newest(json: Data, current: ReleaseVersion?, includeTestBuilds: Bool, edition: Edition,
                        skipping: String? = nil) throws -> ReleaseUpdate? {
-        guard let best = try releases(json: json, includeTestBuilds: includeTestBuilds).first else { return nil }
+        guard let best = try releases(json: json, includeTestBuilds: includeTestBuilds, edition: edition).first else { return nil }
         if let current, !best.version.isNewer(than: current) { return nil }
         return best.version.text == skipping ? nil : best
     }
@@ -116,9 +119,13 @@ enum Updates {
         return ["/bin/sh", "-c", script, "bloodborne-relaunch", String(pid), bundle.path, opener]
     }
 
-    static func unpackedProblem(info: [String: Any], expected: ReleaseVersion) -> String? {
+    static func unpackedProblem(info: [String: Any], expected: ReleaseVersion, edition: Edition) -> String? {
         guard info["CFBundleIdentifier"] as? String == bundleIdentifier else {
             return "The download is not Bloodborne.app (bundle identifier \(info["CFBundleIdentifier"] as? String ?? "missing"))."
+        }
+        let got = info["BBEdition"] as? String ?? "missing"
+        guard got == edition.rawValue else {
+            return "The download is the \(got) edition, not \(edition.rawValue)."
         }
         let version = info["CFBundleVersion"] as? String ?? "missing"
         return version == expected.text ? nil : "The download contains version \(version), not \(expected.text)."

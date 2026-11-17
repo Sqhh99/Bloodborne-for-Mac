@@ -9,10 +9,13 @@ enum About {
         let info = Bundle.main.infoDictionary ?? [:]
         let short = info["CFBundleShortVersionString"] as? String ?? "dev"
         let build = info["CFBundleVersion"] as? String ?? short
+        // Release apps name their edition (package_app.sh's BBEdition).
+        let edition = (info["BBEdition"] as? String).flatMap(Edition.init(rawValue:))
+        let details = [build == short ? nil : build, edition?.label].compactMap { $0 }.joined(separator: " · ")
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "Bloodborne",
             .applicationVersion: short,
-            .version: build == short ? "" : build,
+            .version: details,
             .credits: credits(commit: info["BBCommit"] as? String),
         ])
         NSApp.activate()
@@ -36,6 +39,7 @@ enum About {
         }
         add(L("macOS port of the native Bloodborne PC port: the original PS4 game code runs through Rosetta 2, the graphics on Metal.") + "\n")
         add(L("Built on bbport by deadinside28, the Windows port by Mrsuss60 and the shadPS4 video core.") + "\n")
+        add(L("A fork of bloodborne_mac_port, with code from bloodborne-mac.") + "\n")
         if let commit, !commit.isEmpty {
             add(L("Commit") + " ", secondary: true)
             add(commit, link: Updates.repositoryPage.appendingPathComponent("commit/\(commit)"))
