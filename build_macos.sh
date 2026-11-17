@@ -152,8 +152,11 @@ if [[ ${1:-} == --test ]]; then
             -Wl,-rpath,"$ROOT/${walker#*:}" -o "out/srt-walker-test-${walker%%:*}"
         "out/srt-walker-test-${walker%%:*}"
         # Vertex/tessellation descriptor reads use the same bounded guest-fault recovery.
-        cmake --build "${walker#*:}" --target shader-userdata-test >/dev/null
-        "${walker#*:}/shader-userdata-test"
+        cmake --build "${walker#*:}" --target shader-userdata-test gnm-submit-validation-test \
+            gnm-submit-api-test upload-reservation-test >/dev/null
+        for boundary in shader-userdata-test gnm-submit-validation-test gnm-submit-api-test upload-reservation-test; do
+            "${walker#*:}/$boundary"
+        done
     done
     # Metal-native M1: Metal::Object, Device ticks and limits, Metal::Encoder (arm64, no window);
     # again under Metal's validation layer.

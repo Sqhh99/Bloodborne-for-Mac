@@ -4,6 +4,9 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- GPU submissions validate the whole command batch before publishing work or patching a flip.
+  Shader descriptor reads check their complete width, and constant uploads reject invalid
+  reservations and arithmetic overflow before advancing the ring.
 - The launcher checks this fork's releases (`Sqhh99/Bloodborne-for-Mac`) for updates; the About
   panel's source/release links and packaged source-code link point to this repository too.
 - The app always opens the launcher before playing. Removed the "Show launcher every time"
