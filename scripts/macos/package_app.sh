@@ -159,7 +159,7 @@ EOF
 commit=$(git rev-parse --short HEAD)
 cat > "$lic/README.txt" <<EOF
 Bloodborne macOS port $version (commit $commit)
-Source code: https://github.com/Wooloomooloo2/bloodborne_mac_port/tree/$commit
+Source code: https://github.com/Sqhh99/Bloodborne-for-Mac/tree/$commit
 Existing port sources are GPL-2.0-or-later (LICENSE-bloodborne-mac-port.txt). The native menu
 adapters and combined runtime retain GPL-3.0-or-later (LICENSE-native-menu.txt).
 The other files are the licences of bundled libraries. No game files are included.

@@ -127,11 +127,11 @@ static uint8_t key_axis(int negative, int positive, int reach) {
 #define MENU_LIST_UPDATE_OFFSET 0x1acff30u
 static uintptr_t menu_flow_address;
 static uint64_t menu_movement_consumed;
-static uint64_t menu_back_guard_until; /* us: movement presses after Back are not the d-pad */
+static uint64_t menu_exit_guard_until; /* us: movement presses after Back/Confirm are not the d-pad */
 void runtime_pad_set_image(unsigned char *image, uint64_t size) {
     static const unsigned char signature[]={0x55,0x48,0x89,0xe5,0x41,0x57};
     menu_flow_address=0;
-    menu_movement_consumed=0; menu_back_guard_until=0;
+    menu_movement_consumed=0; menu_exit_guard_until=0;
     runtime_menu_pointer_set_image(image,size);
     if (!image || size<MENU_FLOW_OFFSET+sizeof(uintptr_t) ||
         memcmp(image+MENU_LIST_UPDATE_OFFSET,signature,sizeof signature)) return;
@@ -385,24 +385,27 @@ static void sample_devices(PadData *d) {
     else if (!menu) options_latched=1;
     if (!HELD(BIND_MENU_BACK)) back_consumed=0;
     else if (menu) back_consumed=1;
-    /* Back and a movement alias must not send Circle + d-pad in the same sample: closing
-     * the menu can expose that d-pad press to gameplay (weapons / quick items / blood bullets).
+    /* Back/Confirm and a movement alias must not send Circle/Cross + d-pad in the same sample:
+     * closing the menu can expose that d-pad press to gameplay (weapons / items / blood bullets).
      * Consume each such movement press until release, including a menu's closing animation or
      * a return to its parent list. Outside menus the same held key can still walk the hunter.
      * A list keeps the input focus while it fades out after Back (0.25-0.35 s measured at the
-     * headstones, 2026-11-16): a movement key pressed then, after a quick tap of Q, was the
+     * headstones, 2026-11-16): a movement key pressed then, after a quick tap of Q or E, was the
      * d-pad, which the game applied once the list had gone (W/A/S/D: blood bullets, left
-     * weapon, quick item, right weapon). Presses within MENU_BACK_GUARD_US of Back are consumed
-     * too; a parent list takes fresh presses after that. */
-    enum { MENU_BACK_GUARD_US=500000 };
+     * weapon, quick item, right weapon). Yes/No item dialogs close through Confirm too. Presses
+     * within MENU_EXIT_GUARD_US of either action are consumed; a parent list takes fresh presses
+     * after that. */
+    enum { MENU_EXIT_GUARD_US=500000 };
     const uint64_t movement_mask=(UINT64_C(1)<<BIND_MOVE_FORWARD)|(UINT64_C(1)<<BIND_MOVE_BACK)|
                                  (UINT64_C(1)<<BIND_MOVE_LEFT)|(UINT64_C(1)<<BIND_MOVE_RIGHT);
     const int menu_back=HELD(BIND_MENU_BACK) || HELD(BIND_CIRCLE) || HELD(BIND_DODGE) ||
                         HELD(BIND_SPRINT) || (HELD(BIND_OPTIONS) && !options_latched);
+    const int menu_confirm=HELD(BIND_CROSS);
+    const int menu_exit=menu_back || menu_confirm;
     const uint64_t sample_us=now_us();
-    if (menu && menu_back) menu_back_guard_until=sample_us+MENU_BACK_GUARD_US;
+    if (menu && menu_exit) menu_exit_guard_until=sample_us+MENU_EXIT_GUARD_US;
     menu_movement_consumed&=held;
-    if (menu && (menu_back || sample_us<menu_back_guard_until)) menu_movement_consumed|=held&movement_mask;
+    if (menu && (menu_exit || sample_us<menu_exit_guard_until)) menu_movement_consumed|=held&movement_mask;
     const uint64_t navigation=held&~menu_movement_consumed;
 #define NAV_HELD(a) ((navigation>>(a))&1)
     static const struct { int action; uint32_t ps; } buttons[]={
@@ -435,12 +438,13 @@ static void sample_devices(PadData *d) {
     if (pad_log) {
         static uint64_t last_key=UINT64_MAX;
         const uint64_t key=(uint64_t)(d->buttons&0xffffu)|(uint64_t)menu<<16|(uint64_t)choice<<17|
-                           (uint64_t)menu_back<<18|((held&movement_mask)>>BIND_MOVE_FORWARD)<<20|
+                           (uint64_t)menu_back<<18|(uint64_t)menu_confirm<<19|
+                           ((held&movement_mask)>>BIND_MOVE_FORWARD)<<20|
                            ((menu_movement_consumed&movement_mask)>>BIND_MOVE_FORWARD)<<24;
         if (key!=last_key) {
             last_key=key;
-            printf("Pad log %llu ms: buttons 0x%04x menu %d choice %d back %d move 0x%x consumed 0x%x\n",
-                   (unsigned long long)(now_us()/1000),d->buttons&0xffffu,menu,choice,menu_back,
+            printf("Pad log %llu ms: buttons 0x%04x menu %d choice %d back %d confirm %d move 0x%x consumed 0x%x\n",
+                   (unsigned long long)(now_us()/1000),d->buttons&0xffffu,menu,choice,menu_back,menu_confirm,
                    (unsigned)((held&movement_mask)>>BIND_MOVE_FORWARD),
                    (unsigned)((menu_movement_consumed&movement_mask)>>BIND_MOVE_FORWARD));
         }

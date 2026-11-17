@@ -4,6 +4,8 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- The launcher checks this fork's releases (`Sqhh99/Bloodborne-for-Mac`) for updates; the About
+  panel's source/release links and packaged source-code link point to this repository too.
 - The app always opens the launcher before playing. Removed the "Show launcher every time"
   checkbox and its in-game counterparts; old settings no longer skip the launcher. "Hide launcher
   while playing" still hides it during a session and brings it back when the game ends.
@@ -16,6 +18,8 @@ What each release of the macOS port changed, newest first. Moved here from the R
   is held with Q or pressed just after it. Movement aliases held with Back, or pressed within
   half a second of it (the list's fade-out), are consumed until released; the hunter walks
   as soon as the list has gone.
+- Confirming an item's Yes/No dialog with E or Enter now uses the same movement protection:
+  held W/A/S/D cannot switch weapons, cycle items or make blood bullets as the dialog closes.
 - The Doll's level-up and gesture animations no longer briefly reset to standing before their
   follow-up pose. FPS patches preserve the event scripts' authored frame-duration unit.
 - Free look follows mouse displacement directly: equal distances produce equal turns at any

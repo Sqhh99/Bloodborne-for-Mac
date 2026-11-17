@@ -2677,6 +2677,22 @@ An isolated app using a save copy loaded into the world and logged the verified
 `0x2034770` quick-item hook as installed; the real save was not used for automated testing.
 The owner subsequently tested the updated local app and confirmed no issues on 2026-11-15.
 
+## 2026-11-17: Confirm + movement leaks through an item's Yes/No dialog (fork)
+
+The owner reported holding any W/A/S/D direction and confirming either answer with E
+switching equipment/items or making blood bullets. The previous fix consumed contextual
+movement aliases only with Back; Confirm still emitted Cross and the d-pad together.
+`sample_devices` now applies the existing release latch and 500 ms closing guard to
+`BIND_CROSS` too, covering E, both Enter keys and remapped confirmation bindings. Explicit
+arrow bindings keep their meaning; held movement resumes through the stick outside menus.
+
+The two-choice pad fixture failed against the original code at Confirm + movement, then
+passes after the fix. Coverage includes all four directions, two- and five-item lists,
+Back and Confirm, both press orders, the fade/parent transition, movement outside menus,
+fresh navigation after release, a remapped Confirm key and explicit arrow navigation.
+This is a production input-path regression check; the screenshot's item-use dialog was
+not replayed in a live game session.
+
 ## 2026-11-16: Back + movement leaks through a closing travel list (fork)
 
 The owner reported Q+D switching the right weapon and Q+A switching the left weapon while
