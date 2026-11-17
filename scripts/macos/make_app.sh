@@ -20,7 +20,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 
 # Version for the About panel and the update check (Updates in launcher/): 0.5.2-5-g0b50589 from
 # a checkout is offered the next numbered release.
-version=$(git describe --tags --match 'mac-v*' --dirty 2>/dev/null | sed 's/^mac-v//' || true)
+version=$(git describe --tags --match 'v[0-9]*' --exclude '*-singleplayer' --exclude '*-multiplayer' --dirty 2>/dev/null | sed 's/^v//' || true)
 version=${version:-dev}
 commit=$(git rev-parse --short HEAD 2>/dev/null || true)
 repo_xml=$(printf '%s' "$repo" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')

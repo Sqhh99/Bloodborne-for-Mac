@@ -8,7 +8,7 @@ struct LauncherView: View {
 
     @ObservedObject var model: LauncherModel
 
-    private enum Page: Hashable { case general, advanced, controls }
+    private enum Page: Hashable { case general, advanced, controls, online }
     @State private var page = Page.general
 
     var body: some View {
@@ -22,6 +22,9 @@ struct LauncherView: View {
                 Text(L("General")).tag(Page.general)
                 Text(L("Advanced")).tag(Page.advanced)
                 Text(L("Controls")).tag(Page.controls)
+                if model.edition == .multiplayer {
+                    Text(L("Online")).tag(Page.online)
+                }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -32,6 +35,7 @@ struct LauncherView: View {
                 case .general: general
                 case .advanced: advanced
                 case .controls: ControlsView(model: model)
+                case .online: onlineTab
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -292,6 +296,139 @@ struct LauncherView: View {
 
     private func effectBinding(_ key: String) -> Binding<Bool> {
         Binding(get: { model.effect(key) }, set: { model.setEffect(key, $0) })
+    }
+
+    /// Online play: the bbport.ini keys scripts/launch_settings.sh reads (docs/ONLINE.md).
+    private var onlineTab: some View {
+        Form {
+            Section(L("Online play")) {
+                Toggle(L("Play online"), isOn: $model.online.online)
+                Text(L("Messages, bloodstains and ghosts come from the community server; bells and summons go through the co-op pool below. Off, the game never touches the network. Setup and troubleshooting: docs/ONLINE.md."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section(L("Co-op pool")) {
+                Picker(L("Pool"), selection: $model.online.pool) {
+                    ForEach(OnlinePool.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                if model.online.pool == .huntersdream {
+                    huntersDreamRows
+                }
+            }
+            if model.online.pool == .shadnet {
+                shadnetWarning
+                Section(L("shadNet account")) {
+                    shadnetRows
+                }
+                .disabled(!model.online.shadnetAccepted)
+            }
+            Section(L("Connection")) {
+                Toggle(L("Ask the router to forward the co-op port (UPnP)"), isOn: $model.online.upnp)
+                Text(L("On by default: while the game runs on the shadNet pool, the router forwards the co-op UDP port to this Mac (an hour at a time, renewed; removed on exit). Off, forward the port by hand if bells are not answered."))
+                    .font(.caption).foregroundStyle(.secondary)
+                TextField(L("Co-op UDP port"), text: $model.p2pPortText)
+                    .onChange(of: model.p2pPortText) { _, text in
+                        let digits = String(text.filter { $0.isASCII && $0.isNumber }.prefix(5))
+                        if digits != text { model.p2pPortText = digits }
+                    }
+                Text(portValid ? L("3658 is the PlayStation 4's port; 0 picks any free port. A busy port falls back to a free one.")
+                               : L("A port is a number from 0 to 65535."))
+                    .font(.caption).foregroundStyle(portValid ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+            }
+            if let problem = model.onlineProblem {
+                Text(problem).foregroundStyle(.red)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var portValid: Bool { OnlineSettings.port(from: model.p2pPortText) != nil }
+
+    @ViewBuilder private var huntersDreamRows: some View {
+        if model.signedIn {
+            HStack {
+                Text(L("Account"))
+                Spacer()
+                Text(L("Signed in as \(model.online.thdOnlineId)")).foregroundStyle(.secondary)
+                Button(L("Sign Out"), action: model.signOut)
+            }
+            Text(L("bbhost and Windows-port players are on this pool; it works through any router."))
+                .font(.caption).foregroundStyle(.secondary)
+        } else {
+            switch model.signIn {
+            case .idle, .failed:
+                HStack {
+                    Text(L("Account"))
+                    Spacer()
+                    Text(L("Not signed in")).foregroundStyle(.secondary)
+                    Button(L("Sign in with Discord…"), action: model.startSignIn)
+                }
+                Text(L("Free: links a Discord account the way the Windows port's launcher does. bbhost and Windows-port players are on this pool; it works through any router."))
+                    .font(.caption).foregroundStyle(.secondary)
+                if case let .failed(message) = model.signIn {
+                    Text(L("The sign-in failed: \(message)")).font(.caption).foregroundStyle(.red)
+                }
+            case .starting:
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(L("Asking \(model.communityServer) for a code…"))
+                    Spacer()
+                    Button(L("Cancel"), action: model.cancelSignIn)
+                }
+            case let .waiting(page, code):
+                Text(L("Open the page, sign in with Discord and enter this code:"))
+                HStack(spacing: 12) {
+                    Text(code).font(.system(.title2, design: .monospaced)).textSelection(.enabled)
+                    Button(L("Copy Code")) { model.copyToPasteboard(code) }
+                    Spacer()
+                    Link(page.absoluteString, destination: page).lineLimit(1).truncationMode(.middle)
+                    Button(L("Open Page")) { NSWorkspace.shared.open(page) }
+                }
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(L("Waiting for the approval…"))
+                    Spacer()
+                    Button(L("Cancel"), action: model.cancelSignIn)
+                }
+            }
+        }
+    }
+
+    /// shadNet is opt-in: its protocol sends the password in clear, so the player reads why and
+    /// accepts it before the account is used (`shadnet_insecure_ok=1`, launch_settings.sh).
+    private var shadnetWarning: some View {
+        Section(L("shadNet: read this first")) {
+            Label {
+                Text(L("shadNet sends your password unencrypted")).font(.headline)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+            }
+            Text(L("The shadNet protocol has no encryption. Your account name and password travel to the shadNet server as plain text, so anyone who can see your network traffic (public or shared Wi-Fi, your network provider, anything between you and the server) can read them."))
+            Text(L("Make a shadNet account just for this game, with a username and password you have never used anywhere else: not your Apple Account, email, PlayStation, Discord, Steam or any other account. If you have used this password anywhere else, change it there."))
+                .fontWeight(.semibold)
+            Text(L("The Hunter's Dream pool doesn't have this problem: it signs in with Discord over an encrypted connection and never sees a password."))
+                .font(.caption).foregroundStyle(.secondary)
+            Toggle(L("I understand: use shadNet, with a password I use nowhere else"), isOn: $model.online.shadnetAccepted)
+        }
+    }
+
+    @ViewBuilder private var shadnetRows: some View {
+        TextField(L("Server"), text: $model.online.shadnetServer, prompt: Text(OnlineSettings.defaultShadnetServer))
+        TextField(L("Account name"), text: $model.online.shadnetNpid, prompt: Text(L("Your shadNet online id")))
+            .onChange(of: model.online.shadnetNpid) { model.refreshSecretState() }
+        SecureField(L("Password"), text: $model.newShadnetPassword,
+                    prompt: Text(model.shadnetPasswordStored ? L("Stored in your keychain; type to replace it") : L("Kept in your login keychain")))
+            .disabled(model.online.shadnetNpid.trimmingCharacters(in: .whitespaces).isEmpty)
+        if model.online.shadnetAccepted && model.online.online
+            && model.online.shadnetNpid.trimmingCharacters(in: .whitespaces).isEmpty {
+            Label(L("No account yet: the game will say you are not signed in to the PlayStation Network. Enter your shadNet account name, then the password."),
+                  systemImage: "exclamationmark.circle")
+                .font(.caption).foregroundStyle(.red)
+        }
+        Text(model.online.shadnetAccepted
+             ? L("Register at shadnet.shadps4.net. The password goes to your login keychain when the settings are saved (Play, or quitting), never into the file or the log.")
+             : L("Off until you accept the warning above: the game won't sign in to shadNet."))
+            .font(.caption).foregroundStyle(.secondary)
     }
 }
 

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
-/// A version of the port: the dotted numbers of a release tag (mac-v0.5.2.2 -> 0.5.2.2) and what
+/// A version of the port: the dotted numbers of a release tag (v0.1.0 -> 0.1.0; upstream's
+/// mac-v0.5.2.2 -> 0.5.2.2) and what
 /// follows them ("-test1" for a test build, "-5-g0b50589" for a build from a checkout).
 /// With equal numbers, a test build comes before the release (0.5.2-test1 < 0.5.2) and a checkout
 /// build after the tag it follows (0.5.2 < 0.5.2-5-g0b50589), so a checkout is never offered a
@@ -14,7 +15,8 @@ struct ReleaseVersion: Equatable, CustomStringConvertible {
 
     /// nil when the text does not start with a number ("dev-0b50589" from a manual CI run).
     init?(_ raw: String) {
-        let text = raw.hasPrefix("mac-v") ? String(raw.dropFirst("mac-v".count)) : raw
+        let text = raw.hasPrefix("mac-v") ? String(raw.dropFirst("mac-v".count))
+            : raw.hasPrefix("v") ? String(raw.dropFirst()) : raw
         var head = text[..<(text.firstIndex { !($0.isASCII && ($0.isNumber || $0 == ".")) } ?? text.endIndex)]
         while head.hasSuffix(".") { head = head.dropLast() }
         let parts = head.split(separator: ".", omittingEmptySubsequences: false)

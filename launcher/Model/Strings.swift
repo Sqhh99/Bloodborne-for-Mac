@@ -999,5 +999,157 @@ enum Strings {
         "You need your own copy of the game. Not affiliated with FromSoftware or Sony Interactive Entertainment.":
             (ja: "ご自身で所有するゲームが必要です。FromSoftware および Sony Interactive Entertainment とは関係ありません。",
              zh: "你需要拥有自己的游戏副本。与 FromSoftware 和 Sony Interactive Entertainment 无关。"),
+        // Online tab
+        "Online":
+            (ja: "オンライン",
+             zh: "联机"),
+        "Online play":
+            (ja: "オンラインプレイ",
+             zh: "联机游戏"),
+        "Play online":
+            (ja: "オンラインでプレイ",
+             zh: "联机游玩"),
+        "Messages, bloodstains and ghosts come from the community server; bells and summons go through the co-op pool below. Off, the game never touches the network. Setup and troubleshooting: docs/ONLINE.md.":
+            (ja: "メッセージ、血痕、幻影はコミュニティサーバーから届き、鐘と召喚は下の協力プールを通ります。オフの場合、ゲームはネットワークに一切接続しません。設定とトラブルシューティング：docs/ONLINE.md。",
+             zh: "留言、血迹和幻影来自社区服务器；鸣钟与召唤通过下方的联机池进行。关闭时，游戏完全不访问网络。设置与故障排除：docs/ONLINE.md。"),
+        "Co-op pool":
+            (ja: "協力プール",
+             zh: "联机池"),
+        "Pool":
+            (ja: "プール",
+             zh: "联机池"),
+        "The Hunter's Dream":
+            (ja: "The Hunter's Dream",
+             zh: "The Hunter's Dream"),
+        "shadNet server":
+            (ja: "shadNet サーバー",
+             zh: "shadNet 服务器"),
+        "shadNet account":
+            (ja: "shadNet アカウント",
+             zh: "shadNet 账号"),
+        "Connection":
+            (ja: "接続",
+             zh: "连接"),
+        "Ask the router to forward the co-op port (UPnP)":
+            (ja: "ルーターに協力プレイ用ポートの転送を依頼する（UPnP）",
+             zh: "请求路由器转发联机端口（UPnP）"),
+        "On by default: while the game runs on the shadNet pool, the router forwards the co-op UDP port to this Mac (an hour at a time, renewed; removed on exit). Off, forward the port by hand if bells are not answered.":
+            (ja: "既定でオン：shadNet プールでゲームを実行している間、ルーターが協力プレイ用 UDP ポートをこの Mac に転送します（1 時間ごとに更新し、終了時に削除）。オフの場合、鐘に応答がなければ手動でポートを転送してください。",
+             zh: "默认开启：在 shadNet 联机池中运行游戏时，路由器会把联机 UDP 端口转发到这台 Mac（每次一小时并自动续期，退出时移除）。关闭时，如果鸣钟无人响应，请手动转发端口。"),
+        "Co-op UDP port":
+            (ja: "協力プレイ用 UDP ポート",
+             zh: "联机 UDP 端口"),
+        "3658 is the PlayStation 4's port; 0 picks any free port. A busy port falls back to a free one.":
+            (ja: "3658 は PlayStation 4 のポートです。0 にすると空いているポートを選びます。使用中のポートは空いているポートに切り替わります。",
+             zh: "3658 是 PlayStation 4 使用的端口；0 表示自动选择空闲端口。端口被占用时会改用空闲端口。"),
+        "A port is a number from 0 to 65535.":
+            (ja: "ポートは 0〜65535 の数値です。",
+             zh: "端口必须是 0 到 65535 之间的数字。"),
+        "Account":
+            (ja: "アカウント",
+             zh: "账号"),
+        "Signed in as %@":
+            (ja: "%@ としてサインイン中",
+             zh: "已登录为 %@"),
+        "Sign Out":
+            (ja: "サインアウト",
+             zh: "退出登录"),
+        "bbhost and Windows-port players are on this pool; it works through any router.":
+            (ja: "bbhost と Windows 版のプレイヤーがこのプールにいます。どのルーター越しでも動作します。",
+             zh: "bbhost 和 Windows 移植版的玩家都在这个联机池中；任何路由器下都能使用。"),
+        "Not signed in":
+            (ja: "サインインしていません",
+             zh: "未登录"),
+        "Sign in with Discord…":
+            (ja: "Discord でサインイン…",
+             zh: "使用 Discord 登录…"),
+        "Free: links a Discord account the way the Windows port's launcher does. bbhost and Windows-port players are on this pool; it works through any router.":
+            (ja: "無料：Windows 版のランチャーと同じ方法で Discord アカウントを連携します。bbhost と Windows 版のプレイヤーがこのプールにいます。どのルーター越しでも動作します。",
+             zh: "免费：与 Windows 移植版启动器相同，关联一个 Discord 账号。bbhost 和 Windows 移植版的玩家都在这个联机池中；任何路由器下都能使用。"),
+        "The sign-in failed: %@":
+            (ja: "サインインに失敗しました：%@",
+             zh: "登录失败：%@"),
+        "Asking %@ for a code…":
+            (ja: "%@ にコードを要求しています…",
+             zh: "正在向 %@ 请求验证码…"),
+        "Open the page, sign in with Discord and enter this code:":
+            (ja: "ページを開き、Discord でサインインして、このコードを入力してください：",
+             zh: "打开页面，使用 Discord 登录并输入以下验证码："),
+        "Copy Code":
+            (ja: "コードをコピー",
+             zh: "复制验证码"),
+        "Open Page":
+            (ja: "ページを開く",
+             zh: "打开页面"),
+        "Waiting for the approval…":
+            (ja: "承認を待っています…",
+             zh: "正在等待批准…"),
+        "shadNet: read this first":
+            (ja: "shadNet：最初にお読みください",
+             zh: "shadNet：请先阅读"),
+        "shadNet sends your password unencrypted":
+            (ja: "shadNet はパスワードを暗号化せずに送信します",
+             zh: "shadNet 以明文发送你的密码"),
+        "The shadNet protocol has no encryption. Your account name and password travel to the shadNet server as plain text, so anyone who can see your network traffic (public or shared Wi-Fi, your network provider, anything between you and the server) can read them.":
+            (ja: "shadNet プロトコルには暗号化がありません。アカウント名とパスワードは平文のまま shadNet サーバーに送られるため、通信を見られる人（公共・共有 Wi-Fi、プロバイダ、サーバーとの間にあるあらゆる機器）はそれを読むことができます。",
+             zh: "shadNet 协议没有任何加密。你的账号名和密码会以明文发送到 shadNet 服务器，任何能看到你网络流量的人（公共或共享 Wi-Fi、网络运营商、你与服务器之间的任何设备）都能读取它们。"),
+        "Make a shadNet account just for this game, with a username and password you have never used anywhere else: not your Apple Account, email, PlayStation, Discord, Steam or any other account. If you have used this password anywhere else, change it there.":
+            (ja: "このゲーム専用の shadNet アカウントを、他では一度も使っていないユーザー名とパスワードで作成してください。Apple アカウント、メール、PlayStation、Discord、Steam など他のアカウントのものは使わないでください。このパスワードを他で使ったことがある場合は、そちらで変更してください。",
+             zh: "请为这个游戏单独注册一个 shadNet 账号，使用从未在其他地方用过的用户名和密码：不要用 Apple 账户、邮箱、PlayStation、Discord、Steam 或任何其他账号的密码。如果这个密码在别处用过，请到那里修改。"),
+        "The Hunter's Dream pool doesn't have this problem: it signs in with Discord over an encrypted connection and never sees a password.":
+            (ja: "The Hunter's Dream プールにはこの問題はありません。暗号化された接続で Discord を使ってサインインし、パスワードを扱うことはありません。",
+             zh: "The Hunter's Dream 联机池没有这个问题：它通过加密连接使用 Discord 登录，从不接触密码。"),
+        "I understand: use shadNet, with a password I use nowhere else":
+            (ja: "理解しました：他では使っていないパスワードで shadNet を使う",
+             zh: "我已了解：使用 shadNet，并使用一个别处没用过的密码"),
+        "Server":
+            (ja: "サーバー",
+             zh: "服务器"),
+        "Account name":
+            (ja: "アカウント名",
+             zh: "账号名"),
+        "Your shadNet online id":
+            (ja: "shadNet のオンライン ID",
+             zh: "你的 shadNet 在线 ID"),
+        "Password":
+            (ja: "パスワード",
+             zh: "密码"),
+        "Stored in your keychain; type to replace it":
+            (ja: "キーチェーンに保存済み。入力すると置き換えます",
+             zh: "已保存在钥匙串中；输入新密码即可替换"),
+        "Kept in your login keychain":
+            (ja: "ログインキーチェーンに保存されます",
+             zh: "保存在登录钥匙串中"),
+        "No account yet: the game will say you are not signed in to the PlayStation Network. Enter your shadNet account name, then the password.":
+            (ja: "アカウントがまだありません：ゲームは PlayStation Network にサインインしていないと表示します。shadNet のアカウント名、次にパスワードを入力してください。",
+             zh: "尚未填写账号：游戏会提示你没有登录 PlayStation Network。请输入 shadNet 账号名，然后输入密码。"),
+        "Register at shadnet.shadps4.net. The password goes to your login keychain when the settings are saved (Play, or quitting), never into the file or the log.":
+            (ja: "shadnet.shadps4.net で登録してください。パスワードは設定の保存時（プレイ開始または終了時）にログインキーチェーンへ保存され、ファイルやログには書き込まれません。",
+             zh: "请在 shadnet.shadps4.net 注册。保存设置时（点击开始游戏或退出时）密码会存入登录钥匙串，绝不会写入文件或日志。"),
+        "Off until you accept the warning above: the game won't sign in to shadNet.":
+            (ja: "上の警告に同意するまでオフです：ゲームは shadNet にサインインしません。",
+             zh: "在接受上方警告之前保持关闭：游戏不会登录 shadNet。"),
+        "The shadNet password could not be stored in the keychain: %@":
+            (ja: "shadNet のパスワードをキーチェーンに保存できませんでした：%@",
+             zh: "无法将 shadNet 密码存入钥匙串：%@"),
+        "(mods off online)":
+            (ja: "（オンライン中は Mod がオフ）",
+             zh: "（联机时模组关闭）"),
+        "(cheats off online)":
+            (ja: "（オンライン中はチートがオフ）",
+             zh: "（联机时作弊关闭）"),
+        "(mods and cheats off online)":
+            (ja: "（オンライン中は Mod とチートがオフ）",
+             zh: "（联机时模组和作弊关闭）"),
+        // Editions (Edition.swift) and About
+        "Single-player":
+            (ja: "シングルプレイ版",
+             zh: "单人版"),
+        "Multiplayer":
+            (ja: "マルチプレイ版",
+             zh: "多人版"),
+        "A fork of bloodborne_mac_port, with code from bloodborne-mac.":
+            (ja: "bloodborne_mac_port のフォークで、bloodborne-mac のコードを含みます。",
+             zh: "基于 bloodborne_mac_port 的分支，并包含来自 bloodborne-mac 的代码。"),
     ]
 }

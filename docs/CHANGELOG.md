@@ -2,8 +2,19 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
-## Unreleased: Dark Souls III controls and faster mouse response
+## 0.1.0 (2026-11-17): first release of Bloodborne for Mac
 
+Based on bloodborne_mac_port 0.5.15 with code from bloodborne-mac; published as two editions
+([RELEASES.md](RELEASES.md)). Notes for players: [releases/v0.1.0.md](releases/v0.1.0.md).
+
+- Online play (multiplayer edition): upstream's `release-0.7` online module merged in, with its
+  launcher **Online** tab (pool, Discord sign-in for The Hunter's Dream, shadNet account, UPnP,
+  co-op port) translated into Japanese and Chinese. The single-player edition has neither the
+  module nor the tab and always plays offline.
+- CI: `.github/workflows/build.yml` builds and packages both editions on every push and pull
+  request; `release.yml` publishes `v<version>-singleplayer` and `v<version>-multiplayer`.
+  Upstream's `macos-release.yml` (`mac-v*` tags) is gone.
+- Updates: the launcher checks this repository's `v*` releases of its own edition only.
 - Native 3840 × 1620 (21:9) is available in the launcher's ultrawide list, with the matching
   scene, camera/UI and health-bar patch and the existing low-memory guidance.
 - MetalFX Spatial is an optional upscaler in the launcher, native game settings and Mac overlay, with GPU capability
