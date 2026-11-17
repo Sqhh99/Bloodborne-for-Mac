@@ -4,6 +4,8 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- Native 3840 × 1620 (21:9) is available in the launcher's ultrawide list, with the matching
+  scene, camera/UI and health-bar patch and the existing low-memory guidance.
 - MetalFX Spatial is an optional upscaler in the launcher, native game settings and Mac overlay, with GPU capability
   fallback that preserves the saved choice. It costs less GPU work but shimmers more in motion;
   temporal MetalFX keeps its jitter setting when switching back.

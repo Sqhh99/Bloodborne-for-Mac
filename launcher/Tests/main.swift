@@ -80,6 +80,20 @@ do {
     check(ini["ultrawide_res"] == nil && ini["output_res"] == "2560x1440", "disable removes patch and restores standard output")
 }
 
+// The 1620p ultrawide choice persists as a native patch, without double scaling.
+do {
+    let wide = PixelSize(3840, 1620)
+    check(Resolution.ultrawideOutputs.contains(wide) && Resolution.wideLabel(wide).contains("21:9"), "1620p ultrawide is offered")
+    var settings = GameSettings()
+    settings.ultrawide = true
+    settings.wideOutput = wide
+    var ini = IniFile()
+    settings.apply(to: &ini)
+    check(ini["ultrawide_res"] == "3840x1620" && ini["upscaler"] == "off", "1620p native patch selection")
+    check(GameSettings(ini: ini).displayOutput == wide, "1620p selection survives reload")
+    check(Resolution.ultrawideMemoryWarning(wide, memoryBytes: 16 * 1024 * 1024 * 1024) != nil, "1620p memory guidance")
+}
+
 // Spatial has its own ini value and appears alongside temporal MetalFX.
 do {
     var ini = IniFile(text: "upscaler=metalfx_spatial\npreset=2\n")
