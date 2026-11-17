@@ -4,6 +4,8 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- Text dialogs keep typed keys out of the game, including a held confirming key after the
+  overlay closes. Confirmed text drops accidental leading/trailing spaces.
 - GPU submissions validate the whole command batch before publishing work or patching a flip.
   Shader descriptor reads check their complete width, and constant uploads reject invalid
   reservations and arithmetic overflow before advancing the ring.

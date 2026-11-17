@@ -3,7 +3,8 @@
 #include <unistd.h>
 #include "../src/runtime_pad.c"
 
-static int capture, mouse_look;
+static int capture, mouse_look, text_open;
+int runtime_text_input_open(void) { return text_open; }
 static bool keys[512];
 static int use_keys;
 int bbgpu_overlay_captures_input(void) { return capture; }
@@ -207,6 +208,34 @@ static void test_bindings(void) {
     const uint32_t before=prompt_generation;
     prompt_note(NULL,0,1); /* still the keyboard: nothing to draw again */
     assert(prompt_generation==before);
+    memset(keys,0,sizeof keys);
+    use_keys=0;
+}
+
+/* Text input owns the keyboard across overlay capture and the closing key's release. */
+static void test_text_dialog_keys(void) {
+    use_keys=1;
+    const SDL_Scancode closing[]={SDL_SCANCODE_RETURN,SDL_SCANCODE_E,SDL_SCANCODE_SPACE,SDL_SCANCODE_ESCAPE};
+    for (size_t i=0;i<sizeof closing/sizeof closing[0];++i) {
+        text_open=1; capture=1;
+        PadData d=PRESS(closing[i],SDL_SCANCODE_W);
+        assert(d.buttons==0 && d.left_y==128);
+        text_open=0; capture=0;
+        d=PRESS(closing[i],SDL_SCANCODE_W);
+        assert(d.buttons==0 && d.left_y==128); /* capture ended; closing key is still held */
+        d=PRESS(SDL_SCANCODE_W);
+        assert(d.buttons==0 && d.left_y==128); /* another typed key must be released too */
+        d=PRESS();
+        assert(d.buttons==0);
+        d=PRESS(SDL_SCANCODE_E);
+        assert(d.buttons==BTN_CROSS); /* a new press works */
+        (void)PRESS();
+    }
+    text_open=1;
+    PadData d=PRESS(SDL_SCANCODE_E,SDL_SCANCODE_W); /* also blocked without overlay capture */
+    assert(d.buttons==0 && d.left_y==128);
+    text_open=0;
+    (void)PRESS();
     memset(keys,0,sizeof keys);
     use_keys=0;
 }
@@ -607,6 +636,7 @@ int main(void) {
     assert(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMEPAD));
     assert(pad_init()==0 && pad_open(1,0,0,NULL)==1);
     test_bindings();
+    test_text_dialog_keys();
     test_menu_keys();
     test_menu_wheel_hover();
     test_mouse_response();

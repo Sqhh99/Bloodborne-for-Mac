@@ -15,6 +15,7 @@
 #include "runtime.h"
 #include "gpu/bbgpu.h"
 #include "runtime_bindings.h"
+#include "runtime_text_input.h"
 #include "host/bbgpu_mouse_input.h"
 #include "host/bbgpu_pointer_input.h"
 #include <stdio.h>
@@ -325,9 +326,14 @@ static void sample_devices(PadData *d) {
     d->connected=1; d->connected_count=connected_count ? connected_count : 1;
     d->timestamp=now_us();
     SDL_Gamepad *g=current_gamepad();
-    if (bbgpu_overlay_captures_input()) { runtime_quick_items_input(0,0); return; } /* neutral input */
     const bool *k=bbgpu_split_keyboard(); /* the window is in the GPU host (split) */
     if (!k) k=SDL_WasInit(SDL_INIT_VIDEO) ? SDL_GetKeyboardState(NULL) : NULL;
+    /* Observe the dialog even while the overlay captures input: its closing key must stay
+     * blocked after the overlay releases capture, until all typed keys have been released. */
+    static int text_latch;
+    const int text_blocked=text_input_blocks_keys(runtime_text_input_open(),k,SDL_SCANCODE_COUNT,&text_latch);
+    if (bbgpu_overlay_captures_input()) { runtime_quick_items_input(0,0); return; } /* neutral input */
+    if (text_blocked) k=NULL;
     if (g) {
         static const struct { SDL_GamepadButton sdl; int pad; } map[]={
             {SDL_GAMEPAD_BUTTON_SOUTH,PAD_CROSS}, {SDL_GAMEPAD_BUTTON_EAST,PAD_CIRCLE},
