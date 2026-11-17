@@ -31,8 +31,8 @@ the logs to `~/Library/Logs/Bloodborne` (see [Logs](#logs)). To change the game 
 **Locations**. The launcher opens every time you open the app; press **Play** to start the game.
 
 **Updates.** The first time it opens, the app asks whether to check for updates automatically.
-If you agree, the launcher checks the GitHub releases once a day when its window opens and
-offers a newer version with its release notes. **Install
+If you agree, the launcher checks [this fork's releases](https://github.com/Sqhh99/Bloodborne-for-Mac/releases)
+once a day when its window opens and offers a newer version with its release notes. **Install
 Update** downloads it, checks it (size, SHA-256 from GitHub, bundle identifier, version, code
 signature), replaces `Bloodborne.app` where it is and opens it again; saves and settings are not
 touched. **Bloodborne → Check for Updates…** checks at once; the update window has the
