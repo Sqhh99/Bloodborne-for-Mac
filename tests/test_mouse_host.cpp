@@ -7,6 +7,11 @@
 #include "../gpu/shim/bbport_mouse.cpp"
 
 static BbGpuShared block{};
+static unsigned cursor_changes;
+static bool cursor_hidden;
+namespace BbCursor {
+void SetHiddenUntilMouseMoves(bool hidden) { ++cursor_changes; cursor_hidden=hidden; }
+}
 namespace BbSplit {
 Mode GetMode() { return Mode::Host; }
 BbGpuShared* Shared() { return &block; }
@@ -37,6 +42,20 @@ static BbGpuMouseSample Read() {
     return sample;
 }
 int main() {
+    BbMouse::SetCursorHidden(true);
+    assert(cursor_hidden && cursor_changes==1);
+    BbMouse::SetCursorHidden(true);
+    assert(cursor_changes==1);
+    for (const auto event_type : {SDL_EVENT_WINDOW_FOCUS_GAINED, SDL_EVENT_WINDOW_MOUSE_ENTER, SDL_EVENT_WINDOW_SHOWN}) {
+        BbMouse::SetCursorHidden(true);
+        SDL_Event shown{}; shown.type=event_type;
+        BbMouse::HandleEvent(nullptr,shown);
+        assert(!cursor_hidden && !BbMouse::cursor_hidden);
+    }
+    BbMouse::SetCursorHidden(true);
+    BbMouse::last_pointer_ns=0;
+    BbMouse::Update(nullptr); // no focused window: never keep a global cursor hidden
+    assert(!cursor_hidden);
     BbMouse::ConfigureInput();
     assert(!SDL_GetHintBoolean(SDL_HINT_MAC_SCROLL_MOMENTUM,true));
     assert(!SDL_GetHintBoolean(SDL_HINT_MOUSE_RELATIVE_SYSTEM_SCALE,true));

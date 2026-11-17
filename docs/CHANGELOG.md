@@ -4,6 +4,8 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- A still cursor hides after three seconds of controller play once the game has focus.
+  Native game menus and the Mac overlay keep it visible, and focus changes reset its state.
 - The launcher hands keyboard focus to its game window at startup, including checkout apps
   whose GPU hosts link into out/. Fullscreen moves to another display retry activation at startup.
 - Text dialogs keep typed keys out of the game, including a held confirming key after the

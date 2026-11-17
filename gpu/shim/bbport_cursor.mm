@@ -9,6 +9,12 @@
 
 namespace BbCursor {
 
+void SetHiddenUntilMouseMoves(bool hidden) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [NSCursor setHiddenUntilMouseMoves:hidden];
+    });
+}
+
 namespace {
 const auto g_loaded = std::chrono::steady_clock::now(); // the GPU host's start
 }

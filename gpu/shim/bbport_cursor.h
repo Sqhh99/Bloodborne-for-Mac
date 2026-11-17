@@ -3,6 +3,8 @@
 #pragma once
 
 namespace BbCursor {
+// Apply immediately even when the mouse is still; false restores it for menus/focus changes.
+void SetHiddenUntilMouseMoves(bool hidden);
 // After the window went full screen or moved to another display during the first seconds:
 // takes the focus back if macOS gave it to another app on that display (Spaces switch).
 void ActivateAfterWindowMove(const char* why);
