@@ -4,6 +4,9 @@ What each release of the macOS port changed, newest first. Moved here from the R
 
 ## Unreleased: Dark Souls III controls and faster mouse response
 
+- MetalFX Spatial is an optional upscaler in the launcher, native game settings and Mac overlay, with GPU capability
+  fallback that preserves the saved choice. It costs less GPU work but shimmers more in motion;
+  temporal MetalFX keeps its jitter setting when switching back.
 - A still cursor hides after three seconds of controller play once the game has focus.
   Native game menus and the Mac overlay keep it visible, and focus changes reset its state.
 - The launcher hands keyboard focus to its game window at startup, including checkout apps

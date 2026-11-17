@@ -80,6 +80,16 @@ do {
     check(ini["ultrawide_res"] == nil && ini["output_res"] == "2560x1440", "disable removes patch and restores standard output")
 }
 
+// Spatial has its own ini value and appears alongside temporal MetalFX.
+do {
+    var ini = IniFile(text: "upscaler=metalfx_spatial\npreset=2\n")
+    let spatial = GameSettings(ini: ini)
+    check(spatial.upscaler == .metalfx_spatial && spatial.upscaler.usesPreset, "read Spatial")
+    check(Upscaler.launcherChoices.contains(.metalfx_spatial), "Spatial is offered")
+    spatial.apply(to: &ini)
+    check(ini["upscaler"] == "metalfx_spatial", "Spatial round trip")
+}
+
 // GameSettings: defaults, reading, values the launcher does not offer, writing back.
 do {
     let defaults = GameSettings(ini: IniFile())
