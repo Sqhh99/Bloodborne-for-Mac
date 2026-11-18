@@ -90,4 +90,12 @@ the player's game folder it uses the game's own `sce_sys/icon0.png`:
   (run.sh; `gpu/shim/bbport_app_icon.mm`).
 
 A checkout's `Bloodborne.app` (`make_app.sh`) makes its bundle icon from icon0.png when it knows
-the game folder.
+the game folder (and says so in Info.plist, `BBGameIcon=1`).
+
+Once the bundle's own icon is the game's (a custom icon from an earlier launch, or
+`BBGameIcon`), neither the launcher nor the game window sets an icon in memory: every Dock tile
+(the launcher, the game window, the app when not running) shows the one registered icon. Before,
+the Dock switched between the bundle's icon and an in-memory copy at launch, when the game
+window opened, and when the game ended (the launcher, hidden as an accessory app while playing,
+gets a new Dock tile with the bundle's icon); an in-memory icon is now set again after each
+such switch (`AppDelegate.showWindow`).

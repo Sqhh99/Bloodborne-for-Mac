@@ -1354,6 +1354,19 @@ do {
     }
 }
 
+// Whether the bundle's own icon is already the game's: then nothing is set in memory, so the
+// Dock shows one icon throughout (it changed at launch and when the game ended).
+do {
+    let fm = FileManager.default
+    let app = fm.temporaryDirectory.appendingPathComponent("launcher-icon-\(getpid()).app")
+    try? fm.createDirectory(at: app, withIntermediateDirectories: true)
+    check(!AppIcon.bundleShowsGameIcon(bundleURL: app, info: [:]), "a new download: its own icon")
+    check(AppIcon.bundleShowsGameIcon(bundleURL: app, info: ["BBGameIcon": "1"]), "checkout app made from the game folder")
+    fm.createFile(atPath: app.appendingPathComponent("Icon\r").path, contents: Data())
+    check(AppIcon.bundleShowsGameIcon(bundleURL: app, info: [:]), "custom icon set by an earlier launch")
+    try? fm.removeItem(at: app)
+}
+
 // The Dock icon: the square artwork on Apple's grid, rounded, transparent around the tile.
 do {
     let side = 64

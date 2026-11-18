@@ -10,6 +10,9 @@ Notes for players: [releases/v0.1.2.md](releases/v0.1.2.md).
   game's `sce_sys/icon0.png` as the bundle's custom icon (Finder, Launchpad, the Dock before
   launch), as it already did in the Dock while running. The download still carries only the
   app's own icon (no game artwork is shipped).
+- The Dock icon no longer changes when the launcher opens, when the game starts or when it
+  ends: once the bundle's icon is the game's, nothing sets another one in memory, and an
+  in-memory icon is set again when the launcher comes back after the game.
 - "Hide launcher while playing" is on by default (`BB_HIDE_LAUNCHER=0` in launch.conf keeps it
   shown; an unchanged setting from before now hides it).
 - One app per release, `Bloodborne-macOS-<version>.zip`, always with the online module: the

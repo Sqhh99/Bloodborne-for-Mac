@@ -266,7 +266,7 @@ final class LauncherModel: ObservableObject {
     func checkGame() {
         guard let folder = config.gameDir else {
             gameProblem = L("Choose the game folder (CUSA03173 with update 1.09, the folder containing eboot.bin).")
-            NSApplication.shared.applicationIconImage = nil
+            setDockIcon(nil)
             return
         }
         checkingGame = true
@@ -280,14 +280,35 @@ final class LauncherModel: ObservableObject {
                     if problem == nil {
                         self.applyGameIcon(from: folder)
                     } else {
-                        NSApplication.shared.applicationIconImage = nil
+                        self.setDockIcon(nil)
                     }
                 }
             }
         }
     }
 
+    /// The Dock icon set in memory, nil for the bundle's own. Kept to set again after the
+    /// launcher becomes a regular app once more (AppDelegate.showWindow): hidden while playing
+    /// it is an accessory app without a Dock tile, and the tile made when the game ends shows
+    /// the bundle's icon.
+    private(set) var dockIcon: NSImage?
+
+    func setDockIcon(_ icon: NSImage?) {
+        dockIcon = icon
+        NSApplication.shared.applicationIconImage = icon
+    }
+
+    /// The bundle's own icon is already the game's: the custom icon applyBundleIcon set on an
+    /// earlier launch, or a checkout app make_app.sh made from the game folder (BBGameIcon).
+    /// Nothing is then set in memory: every Dock tile (launcher, game window, the app when not
+    /// running) shows the one registered icon. Switching between it and an in-memory copy, which
+    /// the Dock draws differently, showed as the icon changing at launch and when the game ended.
+    static func bundleShowsGameIcon(_ bundle: Bundle = .main) -> Bool {
+        AppIcon.bundleShowsGameIcon(bundleURL: bundle.bundleURL, info: bundle.infoDictionary ?? [:])
+    }
+
     private func applyGameIcon(from folder: URL) {
+        if Self.bundleShowsGameIcon() { return }
         let iconURL = folder.appendingPathComponent("sce_sys/icon0.png")
         guard FileManager.default.fileExists(atPath: iconURL.path),
               let iconImage = NSImage(contentsOf: iconURL) else { return }
@@ -295,10 +316,12 @@ final class LauncherModel: ObservableObject {
         if let square = iconImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
            let rounded = AppIcon.rounded(square) {
             let icon = NSImage(cgImage: rounded, size: NSSize(width: 512, height: 512))
-            NSApplication.shared.applicationIconImage = icon
+            // This session keeps the in-memory copy (already on screen); from the next launch
+            // the bundle's custom icon is used throughout.
+            setDockIcon(icon)
             applyBundleIcon(icon)
         } else {
-            NSApplication.shared.applicationIconImage = iconImage
+            setDockIcon(iconImage)
         }
     }
 
@@ -310,8 +333,6 @@ final class LauncherModel: ObservableObject {
     private func applyBundleIcon(_ icon: NSImage) {
         guard case .packaged = layout else { return }
         let bundle = Bundle.main.bundleURL
-        // A custom folder icon lives in the bundle's "Icon\r" file (its resource fork).
-        if FileManager.default.fileExists(atPath: bundle.appendingPathComponent("Icon\r").path) { return }
         if NSWorkspace.shared.setIcon(icon, forFile: bundle.path, options: []) {
             // Re-registered so LaunchServices drops its cached icon: window thumbnails (Mission
             // Control, Stage Manager) and app switchers badge windows with the registered one,

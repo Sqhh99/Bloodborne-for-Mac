@@ -25,6 +25,14 @@ enum AppIcon {
         return path
     }
 
+    /// The bundle's own icon is the game's: Info.plist's BBGameIcon (make_app.sh made the .icns
+    /// from the game folder) or a custom icon, which lives in the bundle's "Icon\r" file (its
+    /// resource fork; what the launcher's NSWorkspace.setIcon writes).
+    static func bundleShowsGameIcon(bundleURL: URL, info: [String: Any]) -> Bool {
+        if info["BBGameIcon"] as? String == "1" { return true }
+        return FileManager.default.fileExists(atPath: bundleURL.appendingPathComponent("Icon\r").path)
+    }
+
     static func rounded(_ image: CGImage) -> CGImage? {
         guard let context = CGContext(data: nil, width: canvas, height: canvas, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
