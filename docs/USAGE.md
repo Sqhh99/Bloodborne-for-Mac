@@ -44,13 +44,14 @@ location. **Bloodborne → About Bloodborne** shows the version, build and commi
 **Preparing the game folder from PKG files.** The app needs an unpacked folder, not `.pkg`
 files. If you already play on shadPS4 you have one: use that folder, but first copy the
 contents of the update folder next to it (`CUSA03173-patch` or similar) into it, replacing
-files. To unpack decrypted (fake-signed) PKGs, download `pkg_extract-macOS.zip` from the same
-release, unzip it and, in Terminal from that folder:
+files. To unpack decrypted (fake-signed) PKGs, use the `pkg_extract` tool inside the app
+(0.1.3 and later; 0.1.2 and earlier releases had it as a separate `pkg_extract-macOS.zip`). In
+Terminal:
 
 ```sh
-xattr -d com.apple.quarantine pkg_extract
-./pkg_extract /path/to/base-game.pkg ~/Bloodborne        # creates ~/Bloodborne/CUSA03173
-./pkg_extract /path/to/update-1.09.pkg ~/Bloodborne-update
+pkg_extract=/Applications/Bloodborne.app/Contents/Resources/tools/pkg_extract
+"$pkg_extract" /path/to/base-game.pkg ~/Bloodborne        # creates ~/Bloodborne/CUSA03173
+"$pkg_extract" /path/to/update-1.09.pkg ~/Bloodborne-update
 ditto ~/Bloodborne-update/CUSA03173 ~/Bloodborne/CUSA03173   # merge the update over the game
 ```
 

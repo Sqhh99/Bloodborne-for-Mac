@@ -343,8 +343,8 @@ the live path (the startup patch breaks geometry there). Check screenshots when 
   Online tab localized. bloodborne-mac's `bbnet20` was not used: it targets bloodborne-runtime.
 - **Releases** (docs/RELEASES.md): from 0.1.2 one app per release `v<version>`,
   `Bloodborne-macOS-<version>.zip`, always with libbbnet (0.1.0/0.1.1 also had a single-player
-  edition). Each release also carries a `-multiplayer.zip` copy and package_app.sh writes
-  `BBEdition=multiplayer`, both only for 0.1.1's updater. The launcher hides the Online tab
+  edition). **A release is that one file, nothing else** (owner, 2026-11-18): pkg_extract is
+  inside the app (`Resources/tools/pkg_extract`); no compatibility copies. The launcher hides the Online tab
   when the module is missing (checkouts); run.sh forces `BB_ONLINE=0` then. CI:
   `.github/workflows/build.yml` (push/PR; deps/ and ccache cached), `release.yml` (tag
   `v<version>` or dispatch).

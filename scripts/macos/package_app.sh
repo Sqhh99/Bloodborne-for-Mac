@@ -22,6 +22,7 @@
 #   Resources/port/               run.sh, scripts/*.py, patches/
 #   Resources/python/             standalone CPython (arm64) for the scripts
 #   Resources/licenses/           GPL text and third-party notices
+#   Resources/tools/pkg_extract   the PKG unpacker (tools/pkg_extract, docs/USAGE.md; arm64)
 #   Resources/benchmark/          the benchmark's save and route (benchmark/ in the repository)
 #                                 (docs/DESIGN_BENCHMARK.md; not in git)
 set -euo pipefail
@@ -97,6 +98,11 @@ done
 # The app's icon: an original drawing (scripts/macos/make_icon.sh), never game artwork. The Dock
 # shows the game's own icon0.png once the launcher (and the game window) know the game folder.
 bash scripts/macos/make_icon.sh "$contents/Resources/Bloodborne.icns"
+
+# The PKG unpacker for preparing the game folder (docs/USAGE.md): inside the app, so a release
+# is one download.
+mkdir -p "$contents/Resources/tools"
+bash tools/pkg_extract/build_release.sh "$contents/Resources/tools/pkg_extract"
 
 # Launch scripts and patches (run.sh runs them; BB_PREBUILT=1 skips building).
 install -m755 run.sh "$contents/Resources/port/"
@@ -194,8 +200,6 @@ code; see online-provenance.txt and LICENSE-online-backend.txt.
 The other files are the notices for bundled libraries. No game files are included.
 EOF
 
-# BBEdition=multiplayer: 0.1.1's updater installs only an app of its own edition (0.1.0 and 0.1.1
-# also had a single-player one); the launcher no longer reads it.
 cat > "$contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -210,7 +214,6 @@ cat > "$contents/Info.plist" <<EOF
     <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
     <key>CFBundleVersion</key><string>$version</string>
     <key>BBCommit</key><string>$commit</string>
-    <key>BBEdition</key><string>multiplayer</string>
     <key>NSHumanReadableCopyright</key><string>Bloodborne for Mac and bloodborne_mac_port contributors. GPL.</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.role-playing-games</string>
@@ -225,7 +228,7 @@ bash scripts/macos/build_launcher.sh
 install -m755 out/launcher/Bloodborne "$contents/MacOS/Bloodborne"
 
 # Ad-hoc signature (arm64 code must be signed to run; install_name_tool invalidated the build's).
-find "$contents/MacOS" "$contents/Frameworks" "$py" -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.so' \) -print0 |
+find "$contents/MacOS" "$contents/Frameworks" "$contents/Resources/tools" "$py" -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.so' \) -print0 |
     while IFS= read -r -d '' file; do
         # The main executable is signed with the bundle (after everything it contains).
         [[ $file == "$contents/MacOS/Bloodborne" ]] && continue

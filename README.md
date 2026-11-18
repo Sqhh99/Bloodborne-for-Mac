@@ -95,8 +95,9 @@ It needs an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your o
 (below). The app is not notarised: unzip, move `Bloodborne.app` to Applications, run
 `xattr -dr com.apple.quarantine /Applications/Bloodborne.app`, open it and choose your game
 folder under **Locations**; the app then takes the game's icon. It updates itself
-(**Bloodborne → Check for Updates…**). Coming from 0.1.0, or from 0.1.1's single-player
-download: download the new version once by hand (your saves and settings stay). The app
+(**Bloodborne → Check for Updates…**). Coming from 0.1.0 or 0.1.1: download the new version
+once by hand (your saves and settings stay). The PKG unpacker for preparing the game folder is
+inside the app ([docs/USAGE.md](docs/USAGE.md)). The app
 includes GPL-3.0-or-later code ([docs/ONLINE_PROVENANCE.md](docs/ONLINE_PROVENANCE.md)).
 
 How releases are built and published: [docs/RELEASES.md](docs/RELEASES.md).

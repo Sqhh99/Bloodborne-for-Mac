@@ -1,19 +1,16 @@
 # Releases
 
 Every version of Bloodborne for Mac is one GitHub release, tag `v<version>`, built by CI from
-the tagged commit:
+the tagged commit, with **one file**: `Bloodborne-macOS-<version>.zip`, the app. It carries the
+online module (`Contents/Frameworks/libbbnet.dylib`; online play stays off until the player
+turns it on on the launcher's **Online** tab, [ONLINE.md](ONLINE.md)) and the PKG unpacker
+(`Contents/Resources/tools/pkg_extract`, [USAGE.md](USAGE.md)). The app includes the online
+module's GPL-3.0-or-later code ([ONLINE_PROVENANCE.md](ONLINE_PROVENANCE.md)).
 
-| Asset | What it is |
-|---|---|
-| `Bloodborne-macOS-<version>.zip` | the app, with the online module (`Contents/Frameworks/libbbnet.dylib`); online play stays off until the player turns it on (launcher **Online** tab, [ONLINE.md](ONLINE.md)) |
-| `Bloodborne-macOS-<version>-multiplayer.zip` | the same zip under the name 0.1.1's update check looks for (below) |
-| `pkg_extract-macOS.zip` | the PKG unpacker ([USAGE.md](USAGE.md)) |
-
-The app includes the online module's GPL-3.0-or-later code ([ONLINE_PROVENANCE.md](ONLINE_PROVENANCE.md)).
-
-History: 0.1.0 was two releases (`v0.1.0-singleplayer`, `v0.1.0-multiplayer`); 0.1.1 was one
-release with a single-player and a multiplayer zip. From 0.1.2 there is only the one app, with
-no edition in its name.
+History: 0.1.0 was two releases (`v0.1.0-singleplayer`, `v0.1.0-multiplayer`); 0.1.1 had a
+single-player and a multiplayer zip; 0.1.2 had the app, the same zip again as
+`-multiplayer.zip` for 0.1.1's update check, and `pkg_extract-macOS.zip`. From 0.1.3 the
+release is the one zip.
 
 ## Updates
 
@@ -22,14 +19,8 @@ The launcher's update check (`launcher/Model/Update.swift`) reads this repositor
 it is not offered. A version with a suffix (`0.1.3-test1`) or a GitHub pre-release is a test
 build, offered only with **Include test builds**. Upstream's `mac-v*` tags and 0.1.0's
 per-edition tags are ignored. The downloaded app must have the same bundle identifier and the
-release's version before it replaces the installed one.
-
-Older apps:
-- **0.1.1, multiplayer:** its check looks for `Bloodborne-macOS-<version>-multiplayer.zip` and
-  installs only an app whose Info.plist says `BBEdition=multiplayer`. The release workflow
-  uploads that copy and package_app.sh still writes the key, so these apps update by
-  themselves. Drop both once 0.1.1 is no longer in use.
-- **0.1.1, single-player, and 0.1.0:** cannot find the new releases; download once by hand.
+release's version before it replaces the installed one. Apps older than 0.1.2 cannot find
+these releases (their check looks for edition names): download once by hand.
 
 An app without the online module (0.1.0/0.1.1's single-player edition, a checkout built
 without it) hides the Online tab, and run.sh exports `BB_ONLINE=0` there, so `online=1` in a
@@ -41,14 +32,14 @@ shared bbport.ini is ignored.
   It builds the dependencies, the port with the online module and the launcher, runs the
   launcher's tests (required) and the port's tests (informational, and not for releases: the
   runner is a VM whose GPU cannot start the renderer), then packages the app with
-  `scripts/macos/package_app.sh <version>`. It checks that the zip has the online module and
-  the icon, and uploads it with `pkg_extract-macOS.zip` as an artifact.
+  `scripts/macos/package_app.sh <version>`. It checks that the zip has the online module, the
+  icon and pkg_extract, and uploads it as an artifact.
 - **Caches:** `deps/` (keyed on `bootstrap_deps.sh`, an hour to build from scratch) and
   ccache's objects for the CMake builds (the GPU library for x86-64 and arm64, the online
   module), restored from the previous run and saved under each commit. `ccache --show-stats`
   in the Build step's log shows the hit rate.
 - **`.github/workflows/release.yml`** calls `build.yml` with the version, then creates the
-  release `v<version>` (Latest) with the assets above. A version with a suffix is published as
+  release `v<version>` (Latest) with the zip. A version with a suffix is published as
   a pre-release. Notes: install steps, then `docs/releases/v<version>.md` (or a pointer to the
   changelog).
 
