@@ -2,6 +2,18 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
+## 0.1.1: app icons, one release per version
+
+Notes for players: [releases/v0.1.1.md](releases/v0.1.1.md).
+
+- The app has an icon again: release bundles carry an original one (`scripts/macos/make_icon.sh`;
+  they had none, so the app and the game window showed a blank icon in the Dock and in Finder).
+  The game window's Dock icon is now the game's own artwork, as the launcher's already was
+  (`gpu/shim/bbport_app_icon.mm`, `BB_GAME_ICON` from run.sh).
+- Each version is one release, `v<version>`, with both editions' zips (0.1.0 was two releases).
+  The update check reads both forms; 0.1.0 apps cannot see the new form, so 0.1.1 is a manual
+  download for them.
+
 ## 0.1.0 (2026-11-17): first release of Bloodborne for Mac
 
 Based on bloodborne_mac_port 0.5.15 with code from bloodborne-mac; published as two editions

@@ -1,10 +1,11 @@
-# Publishes a version as two GitHub releases from one build (docs/RELEASES.md):
-#   v<version>-singleplayer   Bloodborne-macOS-<version>-singleplayer.zip (marked Latest)
-#   v<version>-multiplayer    Bloodborne-macOS-<version>-multiplayer.zip
-# Start it by pushing a tag v<version> (git tag v0.1.0 && git push origin v0.1.0), or from the
-# Actions tab with the version (the release tags then point at the chosen branch's commit).
-# A version with a suffix (0.1.1-test1) is published as a pre-release. Release notes come from
-# docs/releases/v<version>.md when it exists.
+# Publishes a version as one GitHub release, v<version>, with both editions (docs/RELEASES.md):
+#   Bloodborne-macOS-<version>-singleplayer.zip   no online module
+#   Bloodborne-macOS-<version>-multiplayer.zip    with the online module
+# Start it by pushing a tag v<version> (git tag v0.1.1 && git push origin v0.1.1), or from the
+# Actions tab with the version (the tag is then created at the chosen branch's head).
+# A version with a suffix (0.1.2-test1) is published as a pre-release. Release notes come from
+# docs/releases/v<version>.md when it exists. (0.1.0 was published as two releases,
+# v0.1.0-singleplayer and v0.1.0-multiplayer; the launcher reads both forms.)
 name: Release
 
 on:
@@ -54,38 +55,32 @@ jobs:
         with:
           name: Bloodborne-macOS
           path: dist
-      - name: Two releases, one per edition
+      - name: One release with both editions
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          prerelease=()
-          [[ $VERSION == *-* ]] && prerelease=(--prerelease)
+          tag=v$VERSION
+          flags=(--latest)
+          [[ $VERSION == *-* ]] && flags=(--prerelease --latest=false)
           notes_file=docs/releases/v$VERSION.md
-          # Multiplayer first, so the single-player release (published last) is the Latest one.
-          for edition in multiplayer singleplayer; do
-              tag=v$VERSION-$edition
-              if [[ $edition == multiplayer ]]; then
-                  title="Bloodborne for Mac $VERSION (Multiplayer)"
-                  intro="**Multiplayer edition**: everything in the single-player edition plus online play (messages, bloodstains, bells and summons through The Hunter's Dream or shadNet), set up on the launcher's **Online** tab. It includes GPL-3.0-or-later code (the online module); see docs/ONLINE.md and docs/ONLINE_PROVENANCE.md. Off until you turn it on."
-              else
-                  title="Bloodborne for Mac $VERSION (Single-player)"
-                  intro="**Single-player edition**: no online module and no Online tab; the game never connects to the network. Choose the multiplayer release (tag v$VERSION-multiplayer) to play online."
-              fi
-              {
-                  echo "$intro"
-                  echo
-                  echo "Download \`Bloodborne-macOS-$VERSION-$edition.zip\`. It needs an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own decrypted copy of the game (CUSA03173 v1.09). The app is not notarised: after unzipping, run \`xattr -dr com.apple.quarantine Bloodborne.app\`. Setup: README.md."
-                  echo
-                  if [[ -f $notes_file ]]; then cat "$notes_file"; else echo "Changes: docs/CHANGELOG.md."; fi
-              } > "notes-$edition.md"
-              latest=(--latest=false)
-              [[ $edition == singleplayer && ${#prerelease[@]} == 0 ]] && latest=(--latest)
-              if gh release view "$tag" >/dev/null 2>&1; then
-                  gh release upload "$tag" "dist/Bloodborne-macOS-$VERSION-$edition.zip" dist/pkg_extract-macOS.zip --clobber
-              else
-                  gh release create "$tag" --target "$GITHUB_SHA" --title "$title" --notes-file "notes-$edition.md" \
-                      "${prerelease[@]}" "${latest[@]}" \
-                      "dist/Bloodborne-macOS-$VERSION-$edition.zip" dist/pkg_extract-macOS.zip
-              fi
-          done
+          {
+              echo "Two downloads, built from the same commit; pick one:"
+              echo
+              echo "| Edition | Download | Online play |"
+              echo "|---|---|---|"
+              echo "| **Single-player** | \`Bloodborne-macOS-$VERSION-singleplayer.zip\` | none: no online module and no **Online** tab; the game never connects to the network |"
+              echo "| **Multiplayer** | \`Bloodborne-macOS-$VERSION-multiplayer.zip\` | messages, bloodstains, bells and summons through The Hunter's Dream or shadNet, set up on the launcher's **Online** tab (off until you turn it on). Includes GPL-3.0-or-later code: docs/ONLINE_PROVENANCE.md |"
+              echo
+              echo "Both need an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own decrypted copy of the game (CUSA03173 v1.09). The apps are not notarised: after unzipping, run \`xattr -dr com.apple.quarantine Bloodborne.app\`. Each app updates itself to the same edition. Setup: README.md."
+              echo
+              if [[ -f $notes_file ]]; then cat "$notes_file"; else echo "Changes: docs/CHANGELOG.md."; fi
+          } > notes.md
+          assets=("dist/Bloodborne-macOS-$VERSION-singleplayer.zip" "dist/Bloodborne-macOS-$VERSION-multiplayer.zip"
+                  dist/pkg_extract-macOS.zip)
+          if gh release view "$tag" >/dev/null 2>&1; then
+              gh release upload "$tag" "${assets[@]}" --clobber
+          else
+              gh release create "$tag" --target "$GITHUB_SHA" --title "Bloodborne for Mac $VERSION" \
+                  --notes-file notes.md "${flags[@]}" "${assets[@]}"
+          fi

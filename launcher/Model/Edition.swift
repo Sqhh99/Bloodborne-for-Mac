@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
-/// The two builds a release is published as (docs/RELEASES.md): the single-player app has no
-/// online module (libbbnet.dylib) and no Online tab; the multiplayer app has both. Each is
-/// offered only its own edition's updates: release tags end in "-singleplayer" or
-/// "-multiplayer" (v0.1.0-multiplayer), assets in "-<edition>.zip".
+/// The two builds each release carries (docs/RELEASES.md): the single-player app has no
+/// online module (libbbnet.dylib) and no Online tab; the multiplayer app has both. Each updates
+/// only to its own edition's zip, Bloodborne-macOS-<version>-<edition>.zip. (0.1.0 was published
+/// as two releases, tags v0.1.0-singleplayer and v0.1.0-multiplayer.)
 enum Edition: String, CaseIterable {
     case singleplayer
     case multiplayer

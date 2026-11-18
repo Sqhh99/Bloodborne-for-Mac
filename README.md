@@ -82,25 +82,26 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   never touches the network, and mods, cheats and patch files are switched off while it is on.
   Setup and troubleshooting: [docs/ONLINE.md](docs/ONLINE.md). The single-player edition leaves
   the module and the tab out.
-- **Two editions per release** from one CI build (`.github/workflows/build.yml`,
-  `release.yml`): single-player and multiplayer, each updating from its own releases.
+- **Two editions in each release** from one CI build (`.github/workflows/build.yml`,
+  `release.yml`): single-player and multiplayer, each updating to its own edition.
 
 ## Downloads
 
-Each version is published as two GitHub [releases](https://github.com/Sqhh99/Bloodborne-for-Mac/releases)
-built from the same commit:
+Each version is one GitHub [release](https://github.com/Sqhh99/Bloodborne-for-Mac/releases)
+(tag `v<version>`) with two downloads built from the same commit:
 
-| Edition | Release tag | Download | Online play |
-|---|---|---|---|
-| **Single-player** (Latest) | `v0.1.0-singleplayer` | `Bloodborne-macOS-0.1.0-singleplayer.zip` | none: no online module, no **Online** tab, the game never connects |
-| **Multiplayer** | `v0.1.0-multiplayer` | `Bloodborne-macOS-0.1.0-multiplayer.zip` | messages, bloodstains, bells and summons through The Hunter's Dream or shadNet ([docs/ONLINE.md](docs/ONLINE.md)) |
+| Edition | Download | Online play |
+|---|---|---|
+| **Single-player** | `Bloodborne-macOS-<version>-singleplayer.zip` | none: no online module, no **Online** tab, the game never connects |
+| **Multiplayer** | `Bloodborne-macOS-<version>-multiplayer.zip` | messages, bloodstains, bells and summons through The Hunter's Dream or shadNet ([docs/ONLINE.md](docs/ONLINE.md)) |
 
 Both need an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own game
 (below). The apps are not notarised: unzip, move `Bloodborne.app` to Applications, run
 `xattr -dr com.apple.quarantine /Applications/Bloodborne.app`, open it and choose your game
-folder under **Locations**. Each app updates itself from its own edition's releases only
-(**Bloodborne → Check for Updates…**). Both editions share saves and settings, so you can switch
-between them. The multiplayer edition includes GPL-3.0-or-later code
+folder under **Locations**. Each app updates itself to the same edition
+(**Bloodborne → Check for Updates…**); 0.1.0, published as two separate releases, cannot see
+later versions: download 0.1.1 once by hand. Both editions share saves and settings, so you can
+switch between them. The multiplayer edition includes GPL-3.0-or-later code
 ([docs/ONLINE_PROVENANCE.md](docs/ONLINE_PROVENANCE.md)).
 
 How releases are built and published: [docs/RELEASES.md](docs/RELEASES.md).

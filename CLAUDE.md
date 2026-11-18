@@ -341,12 +341,16 @@ the live path (the startup patch breaks geometry there). Check screenshots when 
 
 - **Online play merged** from `origin/release-0.7` (upstream's online branch, same runtime), its
   Online tab localized. bloodborne-mac's `bbnet20` was not used: it targets bloodborne-runtime.
-- **Two editions per version** (docs/RELEASES.md): tags `v<version>-singleplayer` (Latest) and
-  `v<version>-multiplayer`, zips `Bloodborne-macOS-<version>-<edition>.zip`, Info.plist
+- **Two editions per version** (docs/RELEASES.md): from 0.1.1 one release `v<version>` with both
+  zips (0.1.0 was two releases, `v0.1.0-<edition>`; 0.1.0 apps can't see the new form), zips
+  `Bloodborne-macOS-<version>-<edition>.zip`, Info.plist
   `BBEdition`; `BB_EDITION=` for package_app.sh. The single-player app hides the Online tab and
   run.sh forces `BB_ONLINE=0` when the bundle has no libbbnet. The updater offers only its own
   edition's `v*` releases. CI: `.github/workflows/build.yml` (push/PR), `release.yml` (tag
   `v<version>` or dispatch). First version: 0.1.0.
+- **Icons (0.1.1):** release bundles get `Resources/Bloodborne.icns` from
+  `scripts/macos/make_icon.sh` (an original drawing, never game artwork); the launcher and the
+  game window (`gpu/shim/bbport_app_icon.mm`, `BB_GAME_ICON`) set icon0.png in the Dock.
 
 ## Next steps (in order)
 

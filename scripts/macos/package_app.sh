@@ -21,6 +21,7 @@
 #   MacOS/bbgpu-host              GPU process (arm64; owns the window, so the Dock shows the app)
 #   MacOS/bbgpu-host-macos27      the same with the guest range as an exec-time segment (macOS 27+)
 #   Frameworks/*.dylib            universal: libbbgpu, SDL3, FFmpeg; x86-64 libbbnet (multiplayer)
+#   Resources/Bloodborne.icns     the app's icon (scripts/macos/make_icon.sh; no game artwork)
 #   Resources/port/               run.sh, scripts/*.py, patches/
 #   Resources/python/             standalone CPython (arm64) for the scripts
 #   Resources/licenses/           GPL text and third-party notices
@@ -108,6 +109,10 @@ for file in "$contents"/MacOS/* "$contents"/Frameworks/*; do
         fi
     done
 done
+
+# The app's icon: an original drawing (scripts/macos/make_icon.sh), never game artwork. The Dock
+# shows the game's own icon0.png once the launcher (and the game window) know the game folder.
+bash scripts/macos/make_icon.sh "$contents/Resources/Bloodborne.icns"
 
 # Launch scripts and patches (run.sh runs them; BB_PREBUILT=1 skips building).
 install -m755 run.sh "$contents/Resources/port/"
@@ -214,6 +219,7 @@ cat > "$contents/Info.plist" <<EOF
     <key>CFBundleDisplayName</key><string>Bloodborne</string>
     <key>CFBundleIdentifier</key><string>io.github.wooloomooloo2.bloodborne-mac-port</string>
     <key>CFBundleExecutable</key><string>Bloodborne</string>
+    <key>CFBundleIconFile</key><string>Bloodborne</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
     <key>CFBundleVersion</key><string>$version</string>
