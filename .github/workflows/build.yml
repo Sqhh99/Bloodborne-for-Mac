@@ -1,5 +1,5 @@
 # Builds the port on Apple Silicon and packages the app (docs/RELEASES.md):
-#   Bloodborne-macOS-<version>.zip   with the online module (libbbnet.dylib)
+#   Bloodborne-macOS-<version>.zip   the app (online module and pkg_extract inside)
 # Runs on pushes to master, on pull requests and by hand (artifact kept 14 days); release.yml
 # calls it with the release's version and publishes the zip.
 #
@@ -104,14 +104,11 @@ jobs:
           zip=dist/Bloodborne-macOS-$version.zip
           unzip -l "$zip" | grep -q 'Frameworks/libbbnet.dylib' || { echo '::error::the app has no online module'; exit 1; }
           unzip -l "$zip" | grep -q 'Resources/Bloodborne.icns' || { echo '::error::the app has no icon'; exit 1; }
-          bash tools/pkg_extract/build_release.sh dist/pkg_extract
-          (cd dist && ditto -c -k pkg_extract pkg_extract-macOS.zip)
+          unzip -l "$zip" | grep -q 'Resources/tools/pkg_extract' || { echo '::error::the app has no pkg_extract'; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:
           name: Bloodborne-macOS
           retention-days: 14
           if-no-files-found: error
-          path: |
-            dist/Bloodborne-macOS-*.zip
-            dist/pkg_extract-macOS.zip
+          path: dist/Bloodborne-macOS-*.zip

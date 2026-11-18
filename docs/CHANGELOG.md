@@ -2,6 +2,15 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
+## 0.1.3: one download
+
+Notes for players: [releases/v0.1.3.md](releases/v0.1.3.md).
+
+- A release is one file, `Bloodborne-macOS-<version>.zip`: no `-multiplayer.zip` copy (it was
+  only for 0.1.1's update check, which no longer applies; Info.plist's `BBEdition` is gone with
+  it) and no separate `pkg_extract-macOS.zip`: the PKG unpacker is inside the app,
+  `Contents/Resources/tools/pkg_extract` (docs/USAGE.md).
+
 ## 0.1.2: the game's icon, launcher hidden while playing, one app
 
 Notes for players: [releases/v0.1.2.md](releases/v0.1.2.md).
