@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-FileCopyrightText: Copyright 2026 Mark Hall
-# Builds dist/Bloodborne.app and dist/Bloodborne-macOS-<version>-<edition>.zip: a self-contained app for
+# Builds dist/Bloodborne.app and dist/Bloodborne-macOS-<version>.zip: a self-contained app for
 # release downloads (unlike scripts/macos/make_app.sh, which makes a launcher for this checkout).
 # Contains the built port (x86-64 game process, arm64 GPU host), universal copies of the
 # libraries, the launch scripts and a standalone Python for them. No Vulkan loader or MoltenVK:
@@ -8,19 +8,16 @@
 # No game files: the player picks their own game folder on first launch. Ad-hoc signed (not
 # notarised): downloaded copies are quarantined, see the README.
 #
-# usage: BB_EDITION=singleplayer|multiplayer bash scripts/macos/package_app.sh [version]
-#        (build first: bash build_macos.sh)
-#
-# Editions (docs/RELEASES.md): singleplayer leaves the online module out even when it was built;
-# multiplayer requires it (out/gpu/libbbnet.dylib). Default: multiplayer when the module was
-# built, else singleplayer. Info.plist's BBEdition tells the launcher (Online tab, updates).
+# usage: bash scripts/macos/package_app.sh [version]
+#        (build first: bash scripts/macos/bootstrap_deps.sh and bash build_macos.sh: the app
+#        always carries the online module, out/gpu/libbbnet.dylib; docs/RELEASES.md)
 #
 # Layout of Bloodborne.app/Contents:
 #   MacOS/Bloodborne              launcher window (Swift, launcher/): settings, folders, Play
 #   MacOS/bb-probe                game process (x86-64, Rosetta 2)
 #   MacOS/bbgpu-host              GPU process (arm64; owns the window, so the Dock shows the app)
 #   MacOS/bbgpu-host-macos27      the same with the guest range as an exec-time segment (macOS 27+)
-#   Frameworks/*.dylib            universal: libbbgpu, SDL3, FFmpeg; x86-64 libbbnet (multiplayer)
+#   Frameworks/*.dylib            universal: libbbgpu, SDL3, FFmpeg; x86-64 libbbnet (online)
 #   Resources/Bloodborne.icns     the app's icon (scripts/macos/make_icon.sh; no game artwork)
 #   Resources/port/               run.sh, scripts/*.py, patches/
 #   Resources/python/             standalone CPython (arm64) for the scripts
@@ -30,19 +27,11 @@
 set -euo pipefail
 cd -- "$(dirname -- "$0")/../.."
 repo=$PWD
-# Release tags are v<version>; the edition tags the release workflow adds (v0.1.0-multiplayer)
-# name the same commit and are skipped.
+# Release tags are v<version>; 0.1.0 also had edition tags (v0.1.0-multiplayer) on the same
+# commit, skipped here.
 version=${1:-$(git describe --tags --match 'v[0-9]*' --exclude '*-singleplayer' --exclude '*-multiplayer' 2>/dev/null | sed 's/^v//' || echo dev)}
-edition=${BB_EDITION:-}
-if [[ -z $edition ]]; then
-    if [[ -f out/gpu/libbbnet.dylib ]]; then edition=multiplayer; else edition=singleplayer; fi
-fi
-case $edition in
-    singleplayer) ;;
-    multiplayer) [[ -f out/gpu/libbbnet.dylib ]] || { echo "Missing out/gpu/libbbnet.dylib: the multiplayer edition needs the online module (bash scripts/macos/bootstrap_deps.sh, then bash build_macos.sh)." >&2; exit 1; } ;;
-    *) echo "BB_EDITION must be singleplayer or multiplayer, not $edition" >&2; exit 1 ;;
-esac
-echo "Packaging Bloodborne $version, $edition edition"
+[[ -f out/gpu/libbbnet.dylib ]] || { echo "Missing out/gpu/libbbnet.dylib: the app carries the online module (bash scripts/macos/bootstrap_deps.sh, then bash build_macos.sh)." >&2; exit 1; }
+echo "Packaging Bloodborne $version"
 
 # Standalone Python (python-build-standalone, PSF licence). Pinned: name and SHA-256.
 py_release=20260924
@@ -81,15 +70,10 @@ universal libbbgpu.dylib out/gpu/libbbgpu.dylib out/gpu-arm64/libbbgpu.dylib
 set_rpath "$contents/Frameworks/libbbgpu.dylib" @loader_path
 # The online module runs in the x86-64 game process only. Its dependencies are static except
 # libbbgpu and system libraries; the validation below checks the actual dependency list.
-online_module=0
-if [[ $edition == multiplayer ]]; then
-    lipo out/gpu/libbbnet.dylib -verify_arch x86_64
-    install -m755 out/gpu/libbbnet.dylib "$contents/Frameworks/"
-    set_rpath "$contents/Frameworks/libbbnet.dylib" @loader_path
-    online_module=1
-else
-    echo 'Single-player edition: no online module.'
-fi
+lipo out/gpu/libbbnet.dylib -verify_arch x86_64
+install -m755 out/gpu/libbbnet.dylib "$contents/Frameworks/"
+set_rpath "$contents/Frameworks/libbbnet.dylib" @loader_path
+online_module=1
 for lib in libSDL3.0 libavformat.61 libavcodec.61 libswscale.8 libswresample.5 libavutil.59; do
     universal "$lib.dylib" "deps/x86_64/lib/$lib.dylib" "deps/arm64/lib/$lib.dylib"
 done
@@ -201,7 +185,7 @@ if (( online_module )); then
 fi
 commit=$(git rev-parse --short HEAD)
 cat > "$lic/README.txt" <<EOF
-Bloodborne for Mac $version, $edition edition (commit $commit)
+Bloodborne for Mac $version (commit $commit)
 Source code: https://github.com/Sqhh99/Bloodborne-for-Mac/tree/$commit
 Existing port sources are GPL-2.0-or-later (LICENSE-bloodborne-mac-port.txt). The native menu
 adapters and combined runtime retain GPL-3.0-or-later (LICENSE-native-menu.txt).
@@ -210,6 +194,8 @@ code; see online-provenance.txt and LICENSE-online-backend.txt.
 The other files are the notices for bundled libraries. No game files are included.
 EOF
 
+# BBEdition=multiplayer: 0.1.1's updater installs only an app of its own edition (0.1.0 and 0.1.1
+# also had a single-player one); the launcher no longer reads it.
 cat > "$contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -224,7 +210,7 @@ cat > "$contents/Info.plist" <<EOF
     <key>CFBundleShortVersionString</key><string>${version%%-*}</string>
     <key>CFBundleVersion</key><string>$version</string>
     <key>BBCommit</key><string>$commit</string>
-    <key>BBEdition</key><string>$edition</string>
+    <key>BBEdition</key><string>multiplayer</string>
     <key>NSHumanReadableCopyright</key><string>Bloodborne for Mac and bloodborne_mac_port contributors. GPL.</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.role-playing-games</string>
@@ -248,7 +234,7 @@ find "$contents/MacOS" "$contents/Frameworks" "$py" -type f \( -perm -u+x -o -na
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 
-zip=$dist/Bloodborne-macOS-$version-$edition.zip
+zip=$dist/Bloodborne-macOS-$version.zip
 rm -f "$zip"
 (cd "$dist" && ditto -c -k --keepParent --sequesterRsrc Bloodborne.app "$(basename "$zip")")
 echo "Built $app ($(du -sh "$app" | cut -f1)) and $zip ($(du -h "$zip" | cut -f1))"

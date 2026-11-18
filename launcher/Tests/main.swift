@@ -292,10 +292,12 @@ do {
     check(config.dataDir?.path == "/tmp/data", "data folder from launch.conf")
     config.saveDir = URL(fileURLWithPath: tricky[1])
     config.gameDir = URL(fileURLWithPath: tricky[2])
-    check(!config.hideWhilePlaying, "launcher stays shown while playing by default")
-    config.hideWhilePlaying = true
+    check(config.hideWhilePlaying, "launcher hides while playing by default")
+    check(LaunchConfig(ini: IniFile(text: "BB_HIDE_LAUNCHER=1\n")).hideWhilePlaying
+          && !LaunchConfig(ini: IniFile(text: "BB_HIDE_LAUNCHER=0\n")).hideWhilePlaying, "hide launcher: 1 and 0")
+    config.hideWhilePlaying = false
     config.apply(to: &conf)
-    check(LaunchConfig(ini: conf) == config && conf["BB_HIDE_LAUNCHER"] == "1", "launch.conf round trip")
+    check(LaunchConfig(ini: conf) == config && conf["BB_HIDE_LAUNCHER"] == "0", "launch.conf round trip")
     check(LaunchConfig(ini: conf).extraEnvironment["BB_HIDE_LAUNCHER"] == nil, "launcher setting not passed to the game")
     check(conf["BB_FPS"] == "uncap" && conf["BB_DATA_DIR"] == "/tmp/data", "other assignments kept")
 
@@ -309,7 +311,7 @@ do {
     try? bash.run()
     bash.waitUntilExit()
     let sourced = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-    check(bash.terminationStatus == 0 && sourced == "\(tricky[2])\n\(tricky[1])\n1", "bash sources launch.conf: \(sourced.debugDescription)")
+    check(bash.terminationStatus == 0 && sourced == "\(tricky[2])\n\(tricky[1])\n0", "bash sources launch.conf: \(sourced.debugDescription)")
     try? FileManager.default.removeItem(at: url)
     config.saveDir = nil
     config.apply(to: &conf)
@@ -321,7 +323,7 @@ do {
         check(migrated.extraEnvironment["BB_SHOW_LAUNCHER"] == nil, "retired launcher setting not passed to the game")
         migrated.apply(to: &legacy)
         check(legacy["BB_SHOW_LAUNCHER"] == nil, "retired launcher setting removed on save")
-        check(migrated.hideWhilePlaying && legacy["BB_HIDE_LAUNCHER"] == "1" && legacy["BB_FPS"] == "60"
+        check(migrated.hideWhilePlaying && legacy["BB_HIDE_LAUNCHER"] == nil && legacy["BB_FPS"] == "60"
               && legacy.text.contains("# keep this comment"), "other settings survive launcher migration")
     }
 }
@@ -628,13 +630,7 @@ do {
     check(v("0.5.2-5-g0b50589").isNewer(than: v("0.5.2")) && !v("0.5.2").isNewer(than: v("0.5.2-5-g0b50589-dirty")), "checkout build after its tag")
     check(!v("0.5.2").isNewer(than: v("0.5.2-dirty")) && !v("0.5.2-test1").isNewer(than: v("0.5.2-test1")), "dirty tag build; equal")
 
-    check(v("v0.1.0").numbers == [0, 1, 0] && v("v0.1.0").isPlain, "this fork's tags: v<version>")
-    check(Edition.split(tag: "v0.1.0-test1-multiplayer")! == ("v0.1.0-test1", .multiplayer)
-          && Edition.split(tag: "v0.1.0-singleplayer")! == ("v0.1.0", .singleplayer)
-          && Edition.split(tag: "v0.1.0") == nil && Edition.split(tag: "mac-v0.5.2") == nil, "edition tags")
-    check(Edition.detect(info: ["BBEdition": "singleplayer"]) { true } == .singleplayer
-          && Edition.detect(info: [:]) { true } == .multiplayer && Edition.detect(info: [:]) { false } == .singleplayer,
-          "edition from Info.plist, else from the online module")
+    check(v("v0.1.2").numbers == [0, 1, 2] && v("v0.1.2").isPlain, "this fork's tags: v<version>")
 
     func release(_ tag: String, draft: Bool = false, prerelease: Bool = false, asset: String? = nil) -> String {
         let name = asset ?? "Bloodborne-macOS-\(tag.dropFirst(1)).zip"
@@ -646,76 +642,44 @@ do {
         """
     }
     // The API's order: newest published first; 0.5.2 was published after its fix releases.
-    // Every release has a single-player twin (not 0.8.0 and 0.9.1, whose zip is the other
-    // edition's), and upstream's
-    // mac-v tags and tags without an edition are not this app's.
-    let mp = [release("v0.5.2.2-multiplayer", prerelease: true), release("v0.6.0-test1-multiplayer"),
-              release("v0.7.0-multiplayer", draft: true), release("v0.9.0-multiplayer", asset: "Other.zip"),
-              release("v0.9.1-multiplayer", asset: "Bloodborne-macOS-0.9.1-singleplayer.zip"),
-              release("mac-v1.0"), release("v1.1"), release("v0.8.0-multiplayer"),
-              release("v0.5.2-multiplayer"), release("v0.5.2.1-multiplayer", prerelease: true), release("v0.4.0-multiplayer")]
-    let sp = mp.map { $0.replacingOccurrences(of: "-multiplayer", with: "-singleplayer") }.filter { !$0.contains("v0.8.0") && !$0.contains("v0.9.1") }
-    let json = Data(("[" + (mp + sp).joined(separator: ",") + "]").utf8)
-    // Pre-releases (GitHub's flag: 0.5.2.1, 0.5.2.2) and test tags (0.6.0-test1) are test builds.
-    let all = (try? Updates.releases(json: json, includeTestBuilds: false, edition: .multiplayer)) ?? []
-    check(all.map(\.tag) == ["v0.8.0-multiplayer", "v0.5.2-multiplayer", "v0.4.0-multiplayer"], "full releases of the edition only, newest version first: \(all.map(\.tag))")
-    check(all[1].zip.absoluteString == "https://x/Bloodborne-macOS-0.5.2-multiplayer.zip" && all[1].size == 51225450, "the edition's zip, not pkg_extract")
-    check(all[1].digest == "sha256:ab" && all[1].title == "v0.5.2-multiplayer: notes" && all[1].notes == "**Fixed** things"
-          && all[1].version.text == "0.5.2", "release details")
-    check(all.allSatisfy { !$0.isTestBuild }, "full releases are not test builds")
-    let single = (try? Updates.releases(json: json, includeTestBuilds: false, edition: .singleplayer)) ?? []
-    check(single.map(\.tag) == ["v0.5.2-singleplayer", "v0.4.0-singleplayer"], "single-player releases: \(single.map(\.tag))")
-    let tests = (try? Updates.releases(json: json, includeTestBuilds: true, edition: .multiplayer)) ?? []
-    check(tests.map(\.tag) == ["v0.8.0-multiplayer", "v0.6.0-test1-multiplayer", "v0.5.2.2-multiplayer", "v0.5.2.1-multiplayer",
-                               "v0.5.2-multiplayer", "v0.4.0-multiplayer"], "test builds when asked: \(tests.map(\.tag))")
-    check(tests[1...3].allSatisfy(\.isTestBuild), "pre-releases and test tags marked")
-    func newest(_ current: String?, tests: Bool = false, skipping: String? = nil, edition: Edition = .singleplayer) -> String? {
-        (try? Updates.newest(json: json, current: current.flatMap(ReleaseVersion.init), includeTestBuilds: tests,
-                             edition: edition, skipping: skipping))??.tag
-    }
-    check(newest("0.4.0") == "v0.5.2-singleplayer", "newer release offered")
-    check(newest("0.5.2") == nil, "up to date: the 0.5.2.x pre-releases are not offered by default")
-    check(newest("0.5.2", edition: .multiplayer) == "v0.8.0-multiplayer", "each edition its own releases")
-    check(newest("0.5.2", tests: true) == "v0.6.0-test1-singleplayer", "pre-releases and test builds when asked")
-    check(newest("0.5.2-test1") == "v0.5.2-singleplayer", "a test build is offered its release")
-    check(newest("0.5.2-5-g0b50589") == nil && newest("0.5.2-5-g0b50589", tests: true) == "v0.6.0-test1-singleplayer", "checkout build: only later releases")
-    check(newest("0.4.0", skipping: "0.5.2") == nil, "skipped version")
-    check(newest(nil) == "v0.5.2-singleplayer", "dev build: newest release")
-    check((try? Updates.releases(json: Data("{\"message\":\"rate limited\"}".utf8), includeTestBuilds: false, edition: .singleplayer)) == nil, "API error is an error")
-
-    // From 0.1.1: one release per version (tag v<version>) with both editions' zips, beside
-    // 0.1.0's two releases (the form above).
-    func combined(_ tag: String, prerelease: Bool = false, editions: [Edition] = Edition.allCases) -> String {
-        let v = tag.dropFirst(1)
-        let assets = editions.map { e in
-            #"{"name":"Bloodborne-macOS-\#(v)-\#(e.rawValue).zip","size":2,"state":"uploaded","digest":null,"browser_download_url":"https://x/\#(v)-\#(e.rawValue).zip"}"#
-        }
-        return #"{"tag_name":"\#(tag)","name":"Bloodborne for Mac \#(v)","body":"","draft":false,"prerelease":\#(prerelease),"html_url":"https://github.com/o/r/releases/tag/\#(tag)","assets":[\#(assets.joined(separator: ","))]}"#
-    }
-    let current = Data(("[" + [combined("v0.2.0-test1", prerelease: true), combined("v0.1.2", editions: [.multiplayer]),
-                               combined("v0.1.1"), release("v0.1.0-multiplayer"), release("v0.1.0-singleplayer")]
+    // Upstream's mac-v tags, releases without the app's zip and 0.1.0/0.1.1's per-edition zips
+    // are not offered.
+    let json = Data(("[" + [release("v0.5.2.2", prerelease: true), release("v0.6.0-test1"),
+                            release("v0.7.0", draft: true), release("v0.9.0", asset: "Other.zip"),
+                            release("v0.9.1", asset: "Bloodborne-macOS-0.9.1-multiplayer.zip"),
+                            release("v0.9.2-multiplayer"), release("mac-v1.0"),
+                            release("v0.5.2"), release("v0.5.2.1", prerelease: true), release("v0.4.0")]
         .joined(separator: ",") + "]").utf8)
-    func offered(_ version: String, _ edition: Edition, tests: Bool = false) -> ReleaseUpdate? {
-        (try? Updates.newest(json: current, current: ReleaseVersion(version), includeTestBuilds: tests, edition: edition)) ?? nil
+    // Pre-releases (GitHub's flag: 0.5.2.1, 0.5.2.2) and test tags (0.6.0-test1) are test builds.
+    let all = (try? Updates.releases(json: json, includeTestBuilds: false)) ?? []
+    check(all.map(\.tag) == ["v0.5.2", "v0.4.0"], "full releases only, newest version first: \(all.map(\.tag))")
+    check(all.first?.zip.absoluteString == "https://x/Bloodborne-macOS-0.5.2.zip" && all.first?.size == 51225450, "the app's zip, not pkg_extract")
+    check(all.first?.digest == "sha256:ab" && all.first?.title == "v0.5.2: notes" && all.first?.notes == "**Fixed** things"
+          && all.first?.version.text == "0.5.2", "release details")
+    check(all.allSatisfy { !$0.isTestBuild }, "full releases are not test builds")
+    let tests = (try? Updates.releases(json: json, includeTestBuilds: true)) ?? []
+    check(tests.map(\.tag) == ["v0.6.0-test1", "v0.5.2.2", "v0.5.2.1", "v0.5.2", "v0.4.0"], "test builds when asked: \(tests.map(\.tag))")
+    check(tests.prefix(3).allSatisfy(\.isTestBuild), "pre-releases and test tags marked")
+    func newest(_ current: String?, tests: Bool = false, skipping: String? = nil) -> String? {
+        (try? Updates.newest(json: json, current: current.flatMap(ReleaseVersion.init), includeTestBuilds: tests, skipping: skipping))??.tag
     }
-    check(offered("0.1.0", .singleplayer)?.zip.absoluteString == "https://x/0.1.1-singleplayer.zip"
-          && offered("0.1.0", .singleplayer)?.tag == "v0.1.1", "one release per version: the single-player zip")
-    check(offered("0.1.0", .multiplayer)?.zip.absoluteString == "https://x/0.1.2-multiplayer.zip",
-          "the multiplayer zip; a release without this edition's zip is not offered to the other")
-    check(offered("0.1.1", .singleplayer) == nil && offered("0.1.1", .singleplayer, tests: true)?.tag == "v0.2.0-test1", "test builds when asked")
-    let both = ((try? Updates.releases(json: current, includeTestBuilds: false, edition: .singleplayer)) ?? []).map(\.tag)
-    check(both == ["v0.1.1", "v0.1.0-singleplayer"], "0.1.0's per-edition releases are read too: \(both)")
+    check(newest("0.4.0") == "v0.5.2", "newer release offered")
+    check(newest("0.5.2") == nil, "up to date: the 0.5.2.x pre-releases are not offered by default")
+    check(newest("0.5.2", tests: true) == "v0.6.0-test1", "pre-releases and test builds when asked")
+    check(newest("0.5.2-test1") == "v0.5.2", "a test build is offered its release")
+    check(newest("0.5.2-5-g0b50589") == nil && newest("0.5.2-5-g0b50589", tests: true) == "v0.6.0-test1", "checkout build: only later releases")
+    check(newest("0.4.0", skipping: "0.5.2") == nil, "skipped version")
+    check(newest(nil) == "v0.5.2", "dev build: newest release")
+    check((try? Updates.releases(json: Data("{\"message\":\"rate limited\"}".utf8), includeTestBuilds: false)) == nil, "API error is an error")
 
     let now = Date(timeIntervalSince1970: 2_000_000_000)
     check(Updates.isDue(last: nil, now: now) && Updates.isDue(last: now - Updates.interval, now: now), "due")
     check(!Updates.isDue(last: now - 3600, now: now) && Updates.isDue(last: now + 3600, now: now), "not due; clock set back")
 
-    let info: [String: Any] = ["CFBundleIdentifier": Updates.bundleIdentifier, "CFBundleVersion": "0.5.2.2", "BBEdition": "multiplayer"]
-    check(Updates.unpackedProblem(info: info, expected: v("0.5.2.2"), edition: .multiplayer) == nil, "unpacked app accepted")
-    check(Updates.unpackedProblem(info: info, expected: v("0.5.3"), edition: .multiplayer) != nil, "wrong version refused")
-    check(Updates.unpackedProblem(info: info, expected: v("0.5.2.2"), edition: .singleplayer) != nil, "other edition refused")
-    check(Updates.unpackedProblem(info: ["CFBundleIdentifier": "com.example", "CFBundleVersion": "0.5.2.2", "BBEdition": "multiplayer"],
-                                  expected: v("0.5.2.2"), edition: .multiplayer) != nil, "other app refused")
+    let info: [String: Any] = ["CFBundleIdentifier": Updates.bundleIdentifier, "CFBundleVersion": "0.5.2.2"]
+    check(Updates.unpackedProblem(info: info, expected: v("0.5.2.2")) == nil, "unpacked app accepted")
+    check(Updates.unpackedProblem(info: info, expected: v("0.5.3")) != nil, "wrong version refused")
+    check(Updates.unpackedProblem(info: ["CFBundleIdentifier": "com.example", "CFBundleVersion": "0.5.2.2"], expected: v("0.5.2.2")) != nil, "other app refused")
 
     let fm = FileManager.default
     let root = fm.temporaryDirectory.appendingPathComponent("launcher-update-\(getpid())")
@@ -1258,9 +1222,11 @@ do {
     }
     let normal = run(oldCopyLives: 0.6, wait: 10)
     check(normal.opened == "\(app.path) --args --updated", "opens the new copy with --updated: \(normal.opened ?? "nothing")")
-    check(normal.oldExited && normal.took >= 0.5 && normal.took < 3, "only after the old copy exited (\(normal.took) s)")
+    // Upper bounds well under the 10 s wait but loose enough for a busy machine (3 s failed
+    // during a parallel build: 3.7 s).
+    check(normal.oldExited && normal.took >= 0.5 && normal.took < 8, "only after the old copy exited (\(normal.took) s)")
     let stuck = run(oldCopyLives: 30, wait: 0.5)
-    check(stuck.opened != nil && !stuck.oldExited && stuck.took < 3, "a stuck old copy: opens anyway after the wait (\(stuck.took) s)")
+    check(stuck.opened != nil && !stuck.oldExited && stuck.took < 8, "a stuck old copy: opens anyway after the wait (\(stuck.took) s)")
     try? fm.removeItem(at: dir)
 }
 

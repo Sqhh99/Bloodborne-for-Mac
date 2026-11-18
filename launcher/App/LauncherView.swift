@@ -22,7 +22,7 @@ struct LauncherView: View {
                 Text(L("General")).tag(Page.general)
                 Text(L("Advanced")).tag(Page.advanced)
                 Text(L("Controls")).tag(Page.controls)
-                if model.edition == .multiplayer {
+                if model.onlineAvailable {
                     Text(L("Online")).tag(Page.online)
                 }
             }

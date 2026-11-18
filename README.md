@@ -10,8 +10,7 @@ This project is based on
 (forked at 0.5.15, with its online-play branch `release-0.7` merged in) and incorporates code
 from [bloodborne-native/bloodborne-mac](https://github.com/bloodborne-native/bloodborne-mac)
 (the mouse in menus, key prompts and parts of the keyboard layout). It adds Dark Souls III-style
-controls, a launcher in three languages, a faster start and online play, and is released in a
-**single-player** and a **multiplayer** edition ([Downloads](#downloads)).
+controls, a launcher in three languages, a faster start and online play ([Downloads](#downloads)).
 
 > **No game files or copyrighted assets are included, and none will ever be distributed.**
 > You must provide your own legally dumped and decrypted copy of Bloodborne (CUSA03173 v1.09).
@@ -74,35 +73,31 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   did anything. `run.sh` now builds only when a source file changed (`BB_BUILD=always` /
   `never`), and keeps the prepared game image between starts (`BB_PREPARE_CACHE=0` turns that
   off; about 1 s, release app included). Measurements: `docs/FINDINGS.md`.
-- **Online play, on its own launcher tab (multiplayer edition).** Upstream's online module (branch `release-0.7`:
+- **Online play, on its own launcher tab.** Upstream's online module (branch `release-0.7`:
   shadPS4 v0.20.0's network and PSN libraries plus The Hunter's Dream backend from bbhost) is
   merged in and built by `bootstrap_deps.sh` + `build_macos.sh` as `out/gpu/libbbnet.dylib`. The
   launcher's **Online** tab turns it on and holds the pool (The Hunter's Dream with a Discord
   sign-in, or a shadNet account), UPnP and the co-op port. Off by default; with it off the game
   never touches the network, and mods, cheats and patch files are switched off while it is on.
-  Setup and troubleshooting: [docs/ONLINE.md](docs/ONLINE.md). The single-player edition leaves
-  the module and the tab out.
-- **Two editions in each release** from one CI build (`.github/workflows/build.yml`,
-  `release.yml`): single-player and multiplayer, each updating to its own edition.
+  Setup and troubleshooting: [docs/ONLINE.md](docs/ONLINE.md).
+- **Releases from CI** (`.github/workflows/build.yml`, `release.yml`), with the game's own icon
+  for the app once it knows your game folder, and the launcher hidden while you play (an option
+  under General).
 
 ## Downloads
 
 Each version is one GitHub [release](https://github.com/Sqhh99/Bloodborne-for-Mac/releases)
-(tag `v<version>`) with two downloads built from the same commit:
+(tag `v<version>`): download `Bloodborne-macOS-<version>.zip`. Online play (messages,
+bloodstains, bells and summons through The Hunter's Dream or shadNet, [docs/ONLINE.md](docs/ONLINE.md))
+is built in and stays off until you turn it on in the launcher's **Online** tab.
 
-| Edition | Download | Online play |
-|---|---|---|
-| **Single-player** | `Bloodborne-macOS-<version>-singleplayer.zip` | none: no online module, no **Online** tab, the game never connects |
-| **Multiplayer** | `Bloodborne-macOS-<version>-multiplayer.zip` | messages, bloodstains, bells and summons through The Hunter's Dream or shadNet ([docs/ONLINE.md](docs/ONLINE.md)) |
-
-Both need an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own game
-(below). The apps are not notarised: unzip, move `Bloodborne.app` to Applications, run
+It needs an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own game
+(below). The app is not notarised: unzip, move `Bloodborne.app` to Applications, run
 `xattr -dr com.apple.quarantine /Applications/Bloodborne.app`, open it and choose your game
-folder under **Locations**. Each app updates itself to the same edition
-(**Bloodborne → Check for Updates…**); 0.1.0, published as two separate releases, cannot see
-later versions: download 0.1.1 once by hand. Both editions share saves and settings, so you can
-switch between them. The multiplayer edition includes GPL-3.0-or-later code
-([docs/ONLINE_PROVENANCE.md](docs/ONLINE_PROVENANCE.md)).
+folder under **Locations**; the app then takes the game's icon. It updates itself
+(**Bloodborne → Check for Updates…**). Coming from 0.1.0, or from 0.1.1's single-player
+download: download the new version once by hand (your saves and settings stay). The app
+includes GPL-3.0-or-later code ([docs/ONLINE_PROVENANCE.md](docs/ONLINE_PROVENANCE.md)).
 
 How releases are built and published: [docs/RELEASES.md](docs/RELEASES.md).
 
@@ -112,7 +107,7 @@ You need an unpacked, decrypted `CUSA03173` folder with update 1.09 merged in an
 `eboot.bin` (a pre-patched one is rejected). [docs/USAGE.md](docs/USAGE.md) explains how to make
 one from PKG files.
 
-**Ready-made app.** Download an edition from this project's releases ([Downloads](#downloads)).
+**Ready-made app.** Download it from this project's releases ([Downloads](#downloads)).
 Upstream's own builds ([bloodborne_mac_port releases](https://github.com/Wooloomooloo2/bloodborne_mac_port/releases))
 do not contain this project's changes.
 
@@ -248,5 +243,5 @@ Each third-party component keeps its own license file in its directory.
 GNU General Public License v2.0 or later (GPL-2.0-or-later), because of the shadPS4
 components. See [LICENSE](LICENSE). The native-menu adapters retain GPL-3.0-or-later;
 the combined runtime containing them is GPL-3.0-or-later. See
-[the retained license](LICENSES/GPL-3.0-or-later.txt). The online module (`gpu/bbnet`, only in
-the multiplayer edition) includes droogie/bbhost's GPL-3.0-or-later code.
+[the retained license](LICENSES/GPL-3.0-or-later.txt). The online module (`gpu/bbnet`, in the
+release app) includes droogie/bbhost's GPL-3.0-or-later code.

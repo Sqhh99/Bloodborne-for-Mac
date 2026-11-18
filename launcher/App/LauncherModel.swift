@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright 2026 Mark Hall
 // SPDX-License-Identifier: GPL-2.0-or-later
 import AppKit
+import CoreServices
 import Combine
 import Foundation
 
@@ -16,8 +17,8 @@ enum SignInState: Equatable {
 final class LauncherModel: ObservableObject {
     let layout: Layout
     let secrets: SecretStore
-    /// Single-player (no online module, no Online tab) or multiplayer (Edition).
-    let edition: Edition
+    /// The online module is there (Layout.onlineModule): the Online tab shows.
+    let onlineAvailable: Bool
     let updater: Updater
     let benchmark = BenchmarkRunner()
     private let env = ProcessInfo.processInfo.environment
@@ -74,8 +75,8 @@ final class LauncherModel: ObservableObject {
         self.layout = layout
         self.secrets = secrets
         let info = Bundle.main.infoDictionary ?? [:]
-        edition = Edition.detect(info: info) { FileManager.default.fileExists(atPath: layout.onlineModule.path) }
-        updater = Updater(info: info, edition: edition)
+        onlineAvailable = FileManager.default.fileExists(atPath: layout.onlineModule.path)
+        updater = Updater(info: info)
         dataDir = layout.dataDir(env: ProcessInfo.processInfo.environment, config: LaunchConfig())
         // The window's update sheet follows the updater.
         updaterChanges = updater.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
@@ -119,9 +120,9 @@ final class LauncherModel: ObservableObject {
     var modFiles: ModFiles { ModFiles(dataDir: dataDir, env: env) }
     /// "2 mods · 1 cheat on" next to the Mods & Cheats… button.
     var modsSummary: String { Cheats.summary(mods: enabledMods.count, cheats: settings.cheats.count, online: playsOnline) }
-    /// Online play is on and this app can play online (the single-player edition never does:
+    /// Online play is on and this app can play online (without the module it never does:
     /// run.sh plays it offline whatever bbport.ini says).
-    var playsOnline: Bool { edition == .multiplayer && online.online }
+    var playsOnline: Bool { onlineAvailable && online.online }
     var outputChoices: [PixelSize] {
         Resolution.outputs.contains(settings.output) ? Resolution.outputs : Resolution.outputs + [settings.output]
     }
@@ -293,9 +294,30 @@ final class LauncherModel: ObservableObject {
         // Rounded like the other icons in the Dock (the plain square showed square corners).
         if let square = iconImage.cgImage(forProposedRect: nil, context: nil, hints: nil),
            let rounded = AppIcon.rounded(square) {
-            NSApplication.shared.applicationIconImage = NSImage(cgImage: rounded, size: NSSize(width: 512, height: 512))
+            let icon = NSImage(cgImage: rounded, size: NSSize(width: 512, height: 512))
+            NSApplication.shared.applicationIconImage = icon
+            applyBundleIcon(icon)
         } else {
             NSApplication.shared.applicationIconImage = iconImage
+        }
+    }
+
+    /// The release app's icon in Finder, Launchpad and a Dock that is not running it: the game's
+    /// artwork as the bundle's custom icon (what Finder's Get Info sets), since a download may
+    /// only carry the app's own icon (scripts/macos/make_icon.sh). Once per installed copy: an
+    /// update replaces the bundle, and the next check sets it again. A checkout's app already
+    /// has the game's icon (make_app.sh).
+    private func applyBundleIcon(_ icon: NSImage) {
+        guard case .packaged = layout else { return }
+        let bundle = Bundle.main.bundleURL
+        // A custom folder icon lives in the bundle's "Icon\r" file (its resource fork).
+        if FileManager.default.fileExists(atPath: bundle.appendingPathComponent("Icon\r").path) { return }
+        if NSWorkspace.shared.setIcon(icon, forFile: bundle.path, options: []) {
+            // Re-registered so LaunchServices drops its cached icon: window thumbnails (Mission
+            // Control, Stage Manager) and app switchers badge windows with the registered one,
+            // not the Dock's in-memory icon.
+            LSRegisterURL(bundle as CFURL, true)
+            print("Launcher: the app's icon is now the game's artwork")
         }
     }
 

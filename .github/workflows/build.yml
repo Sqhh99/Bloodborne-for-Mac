@@ -1,8 +1,11 @@
-# Builds the port on Apple Silicon and packages both editions (docs/RELEASES.md):
-#   Bloodborne-macOS-<version>-singleplayer.zip   no online module
-#   Bloodborne-macOS-<version>-multiplayer.zip    with the online module (libbbnet.dylib)
-# Runs on pushes to master, on pull requests and by hand (artifacts kept 14 days); release.yml
-# calls it with the release's version and publishes the zips.
+# Builds the port on Apple Silicon and packages the app (docs/RELEASES.md):
+#   Bloodborne-macOS-<version>.zip   with the online module (libbbnet.dylib)
+# Runs on pushes to master, on pull requests and by hand (artifact kept 14 days); release.yml
+# calls it with the release's version and publishes the zip.
+#
+# Caches: deps/ (the libraries, about an hour to build; keyed on bootstrap_deps.sh) and ccache's
+# objects for the CMake builds of the GPU library (x86-64, arm64) and the online module, kept
+# from the previous run (the build step took about 11 minutes without it).
 name: Build
 
 on:
@@ -15,7 +18,7 @@ on:
   workflow_call:
     inputs:
       version:
-        description: Version written into the apps and their zip names (0.1.0, 0.1.1-test1)
+        description: Version written into the app and its zip name (0.1.2, 0.1.3-test1)
         type: string
         required: true
 
@@ -30,6 +33,16 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 180
+    env:
+      # CMake (3.17+) takes its compiler launchers from these when it configures.
+      CMAKE_C_COMPILER_LAUNCHER: ccache
+      CMAKE_CXX_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJC_COMPILER_LAUNCHER: ccache
+      CMAKE_OBJCXX_COMPILER_LAUNCHER: ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPRESS: '1'
+      CCACHE_MAXSIZE: 3G
+      CCACHE_SLOPPINESS: time_macros,include_file_mtime,include_file_ctime
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,15 +51,24 @@ jobs:
 
       - name: Tools and Rosetta 2
         run: |
-          brew install cmake ninja nasm glslang pkgconf boost
+          brew install cmake ninja nasm glslang pkgconf boost ccache
           arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license
+          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
 
-      # deps/ takes about an hour to build from scratch (FFmpeg, SDL, OpenSSL, protobuf...).
       - name: Dependency cache
         uses: actions/cache@v4
         with:
           path: deps
           key: deps-${{ runner.os }}-${{ hashFiles('scripts/macos/bootstrap_deps.sh') }}-py20260924
+
+      # Saved under this commit, restored from the newest earlier one (a cache key is never
+      # overwritten, so each run stores its own and GitHub drops the oldest).
+      - name: Compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('scripts/macos/bootstrap_deps.sh') }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-${{ hashFiles('scripts/macos/bootstrap_deps.sh') }}-
 
       - name: Dependencies (x86-64 with the online module's libraries, and arm64)
         run: |
@@ -55,32 +77,33 @@ jobs:
 
       - name: Build
         run: |
+          ccache --zero-stats
           bash build_macos.sh 2>&1 | tee build.log
-          grep -q '^Online module: ' build.log || { echo '::error::the online module was not built'; exit 1; }
+          ccache --show-stats
+          grep -q '^Online module: /' build.log || { echo '::error::the online module was not built'; exit 1; }
           test -f out/gpu/libbbnet.dylib
 
       # The launcher's tests need no GPU: they must pass.
       - name: Launcher tests
         run: bash scripts/macos/build_launcher.sh --test
 
-      # Informational: the runner is a VM (its GPU and Rosetta differ from a real Mac).
+      # Informational: the runner is a VM whose GPU cannot start the renderer (no Metal residency
+      # sets), so the game-process tests end there. Skipped for releases (their commit already
+      # ran them on its pull request).
       - name: Port tests
+        if: inputs.version == ''
         continue-on-error: true
         run: bash build_macos.sh --test
 
-      - name: Package both editions
+      - name: Package
         env:
           VERSION: ${{ inputs.version }}
         run: |
           version=${VERSION:-dev-$(git rev-parse --short HEAD)}
-          for edition in singleplayer multiplayer; do
-              BB_EDITION=$edition bash scripts/macos/package_app.sh "$version"
-              # The zip holds the app; package_app.sh replaces dist/Bloodborne.app each time.
-              test -f "dist/Bloodborne-macOS-$version-$edition.zip"
-          done
-          # The single-player zip must not carry the online module, the multiplayer one must.
-          check() { unzip -l "dist/Bloodborne-macOS-$version-$1.zip" | grep -c 'Frameworks/libbbnet.dylib' || true; }
-          [[ $(check singleplayer) == 0 && $(check multiplayer) == 1 ]] || { echo '::error::editions packaged wrongly'; exit 1; }
+          bash scripts/macos/package_app.sh "$version"
+          zip=dist/Bloodborne-macOS-$version.zip
+          unzip -l "$zip" | grep -q 'Frameworks/libbbnet.dylib' || { echo '::error::the app has no online module'; exit 1; }
+          unzip -l "$zip" | grep -q 'Resources/Bloodborne.icns' || { echo '::error::the app has no icon'; exit 1; }
           bash tools/pkg_extract/build_release.sh dist/pkg_extract
           (cd dist && ditto -c -k pkg_extract pkg_extract-macOS.zip)
 
@@ -90,6 +113,5 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            dist/Bloodborne-macOS-*-singleplayer.zip
-            dist/Bloodborne-macOS-*-multiplayer.zip
+            dist/Bloodborne-macOS-*.zip
             dist/pkg_extract-macOS.zip
