@@ -1141,13 +1141,7 @@ enum Strings {
         "(mods and cheats off online)":
             (ja: "（オンライン中は Mod とチートがオフ）",
              zh: "（联机时模组和作弊关闭）"),
-        // Editions (Edition.swift) and About
-        "Single-player":
-            (ja: "シングルプレイ版",
-             zh: "单人版"),
-        "Multiplayer":
-            (ja: "マルチプレイ版",
-             zh: "多人版"),
+        // About
         "A fork of bloodborne_mac_port, with code from bloodborne-mac.":
             (ja: "bloodborne_mac_port のフォークで、bloodborne-mac のコードを含みます。",
              zh: "基于 bloodborne_mac_port 的分支，并包含来自 bloodborne-mac 的代码。"),

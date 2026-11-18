@@ -71,6 +71,15 @@ void ApplyGameIcon() {
     if (!path || !path[0]) {
         return;
     }
+    // The bundle's own icon is already the game's (the launcher's custom icon, Icon\r, or a
+    // checkout app made from the game folder, BBGameIcon): the Dock then shows it from the start,
+    // and an in-memory copy, drawn differently, would show as the icon changing
+    // (LauncherModel.bundleShowsGameIcon).
+    NSBundle* bundle = NSBundle.mainBundle;
+    if ([bundle.infoDictionary[@"BBGameIcon"] isEqual:@"1"] ||
+        [NSFileManager.defaultManager fileExistsAtPath:[bundle.bundlePath stringByAppendingPathComponent:@"Icon\r"]]) {
+        return;
+    }
     NSString* file = [NSString stringWithUTF8String:path];
     dispatch_async(dispatch_get_main_queue(), ^{
         NSImage* art = [[NSImage alloc] initWithContentsOfFile:file];

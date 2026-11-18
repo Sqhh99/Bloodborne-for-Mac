@@ -9,9 +9,7 @@ enum About {
         let info = Bundle.main.infoDictionary ?? [:]
         let short = info["CFBundleShortVersionString"] as? String ?? "dev"
         let build = info["CFBundleVersion"] as? String ?? short
-        // Release apps name their edition (package_app.sh's BBEdition).
-        let edition = (info["BBEdition"] as? String).flatMap(Edition.init(rawValue:))
-        let details = [build == short ? nil : build, edition?.label].compactMap { $0 }.joined(separator: " · ")
+        let details = build == short ? "" : build
         NSApp.orderFrontStandardAboutPanel(options: [
             .applicationName: "Bloodborne",
             .applicationVersion: short,

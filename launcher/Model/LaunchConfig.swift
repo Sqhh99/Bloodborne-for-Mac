@@ -35,7 +35,8 @@ enum Shell {
 
 /// launch.conf: the launcher's own settings as shell assignments (bash sources the file in
 /// Bloodborne.command): BB_GAME_DIR, BB_SAVE_DIR (absent: the default),
-/// BB_HIDE_LAUNCHER (1: the window hides while the game runs and comes back when it ends),
+/// BB_HIDE_LAUNCHER (1 or absent: the window hides while the game runs and comes back when it
+/// ends; 0: it stays),
 /// BB_LANGUAGE (the launcher's language: en, ja or zh; absent: the system's), and the
 /// update check's BB_CHECK_UPDATES (absent: not asked yet), BB_UPDATE_TEST_BUILDS, BB_UPDATE_SKIP (a version the player
 /// skipped) and BB_UPDATE_CHECKED (the last automatic check, Unix seconds).
@@ -44,7 +45,8 @@ struct LaunchConfig: Equatable {
     var gameDir: URL?
     var saveDir: URL?
     /// The window hides while the game runs (its settings are locked then) and comes back after.
-    var hideWhilePlaying = false
+    /// On by default (0.1.2).
+    var hideWhilePlaying = true
     /// The launcher's language; nil follows the system (Language.preferred).
     var language: Language?
     /// Automatic update checks; nil until the player answers the first-run question.
@@ -71,7 +73,7 @@ struct LaunchConfig: Equatable {
         gameDir = path("BB_GAME_DIR")
         saveDir = path("BB_SAVE_DIR")
         dataDir = path("BB_DATA_DIR")
-        if let v = ini["BB_HIDE_LAUNCHER"] { hideWhilePlaying = Shell.unquote(v) == "1" }
+        if let v = ini["BB_HIDE_LAUNCHER"] { hideWhilePlaying = Shell.unquote(v) != "0" }
         language = ini["BB_LANGUAGE"].flatMap { Language(rawValue: Shell.unquote($0)) }
         if let v = ini["BB_CHECK_UPDATES"] { checkUpdates = Shell.unquote(v) != "0" }
         if let v = ini["BB_UPDATE_TEST_BUILDS"] { testBuilds = Shell.unquote(v) == "1" }
@@ -94,7 +96,7 @@ struct LaunchConfig: Equatable {
         ini["BB_GAME_DIR"] = gameDir.map { Shell.quote($0.path) }
         ini["BB_SAVE_DIR"] = saveDir.map { Shell.quote($0.path) }
         ini["BB_SHOW_LAUNCHER"] = nil
-        ini["BB_HIDE_LAUNCHER"] = hideWhilePlaying ? "1" : nil
+        ini["BB_HIDE_LAUNCHER"] = hideWhilePlaying ? nil : "0"
         ini["BB_LANGUAGE"] = language?.rawValue
         ini["BB_CHECK_UPDATES"] = checkUpdates.map { $0 ? "1" : "0" }
         ini["BB_UPDATE_TEST_BUILDS"] = testBuilds ? "1" : nil

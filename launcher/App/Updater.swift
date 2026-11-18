@@ -25,13 +25,9 @@ final class Updater: ObservableObject {
     let current: ReleaseVersion?
     /// The version as Info.plist has it ("0.5.2", "0.5.2-5-g0b50589", "dev").
     let currentText: String
-    /// Updates come from this edition's releases only (Edition).
-    let edition: Edition
-
-    init(info: [String: Any], edition: Edition) {
+    init(info: [String: Any]) {
         currentText = info["CFBundleVersion"] as? String ?? info["CFBundleShortVersionString"] as? String ?? "dev"
         current = ReleaseVersion(currentText)
-        self.edition = edition
     }
 
     var available: ReleaseUpdate? {
@@ -63,7 +59,7 @@ final class Updater: ObservableObject {
                 throw UpdateError("GitHub answered \(http.statusCode)\(http.statusCode == 403 ? " (rate limit: try again later)" : "").")
             }
             let found = try Updates.newest(json: data, current: current, includeTestBuilds: includeTestBuilds,
-                                           edition: edition, skipping: manual ? nil : skipping)
+                                           skipping: manual ? nil : skipping)
             if let found {
                 status = .available(found)
                 showing = true
@@ -128,13 +124,12 @@ final class Updater: ObservableObject {
         try? fm.removeItem(at: staging)
         try fm.createDirectory(at: staging, withIntermediateDirectories: true)
         let newApp = staging.appendingPathComponent("Bloodborne.app")
-        let edition = edition
         try await Task.detached {
             try Self.tool(["/usr/bin/ditto", "-x", "-k", zip.path, staging.path], "Unpacking the update failed")
             guard let info = NSDictionary(contentsOf: newApp.appendingPathComponent("Contents/Info.plist")) as? [String: Any] else {
                 throw UpdateError("The download contains no Bloodborne.app.")
             }
-            if let problem = Updates.unpackedProblem(info: info, expected: update.version, edition: edition) { throw UpdateError(problem) }
+            if let problem = Updates.unpackedProblem(info: info, expected: update.version) { throw UpdateError(problem) }
             try Self.tool(["/usr/bin/codesign", "--verify", "--deep", "--strict", newApp.path],
                           "The downloaded app's signature is broken")
             // (URLSession downloads are not quarantined; clear it anyway so the app opens.)

@@ -2,6 +2,25 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
+## 0.1.2: the game's icon, launcher hidden while playing, one app
+
+Notes for players: [releases/v0.1.2.md](releases/v0.1.2.md).
+
+- The app takes the game's icon: once the launcher has checked the game folder, it sets the
+  game's `sce_sys/icon0.png` as the bundle's custom icon (Finder, Launchpad, the Dock before
+  launch), as it already did in the Dock while running. The download still carries only the
+  app's own icon (no game artwork is shipped).
+- The Dock icon no longer changes when the launcher opens, when the game starts or when it
+  ends: once the bundle's icon is the game's, nothing sets another one in memory, and an
+  in-memory icon is set again when the launcher comes back after the game.
+- "Hide launcher while playing" is on by default (`BB_HIDE_LAUNCHER=0` in launch.conf keeps it
+  shown; an unchanged setting from before now hides it).
+- One app per release, `Bloodborne-macOS-<version>.zip`, always with the online module: the
+  single-player download is gone. The update check looks for that name; the release also
+  carries a `-multiplayer` copy so 0.1.1's multiplayer app updates by itself.
+- CI keeps ccache's objects between runs (the CMake builds of the GPU library and the online
+  module) and packages once; releases skip the informational port tests.
+
 ## 0.1.1: app icons, one release per version
 
 Notes for players: [releases/v0.1.1.md](releases/v0.1.1.md).

@@ -70,6 +70,8 @@ if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
         sips -z $double $double "$game/sce_sys/icon0.png" --out "$set_dir/icon_${size}x${size}@2x.png" >/dev/null
     done
     iconutil -c icns "$set_dir" -o "$app/Contents/Resources/Bloodborne.icns"
+    # The launcher and the game window then leave the Dock icon to the bundle (bundleShowsGameIcon).
+    /usr/libexec/PlistBuddy -c 'Add :BBGameIcon string 1' "$app/Contents/Info.plist"
     rm -rf "$(dirname "$set_dir")"
 else
     # Until the game folder is known: the release apps' own icon (the launcher shows the game's

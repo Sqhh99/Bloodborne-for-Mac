@@ -31,11 +31,11 @@ export BB_CONFIG=${BB_CONFIG:-$data/bbport.ini}
 # disposition so Stop works after SDL audio/gamepad init, including the mod-view child.
 # The native GPU host installs its own termination handling and watches parent exit.
 export SDL_NO_SIGNAL_HANDLERS=1
-# The single-player edition (docs/RELEASES.md) ships without the online module: online=1 from a
-# bbport.ini shared with the multiplayer app means nothing there. BB_ONLINE=0 wins over the ini
-# (launch_settings.sh), so no secret is read and mods, cheats and patch files stay on.
+# An app without the online module (0.1.0/0.1.1's single-player edition): online=1 from a shared
+# bbport.ini means nothing there. BB_ONLINE=0 wins over the ini (launch_settings.sh), so no secret
+# is read and mods, cheats and patch files stay on.
 if [[ -n ${BB_PREBUILT:-} && -z ${BB_NET_MODULE:-} && ! -f ../../Frameworks/libbbnet.dylib ]]; then
-    [[ ${BB_ONLINE:-0} == 1 ]] && echo 'Online: the single-player edition has no online module: offline play'
+    [[ ${BB_ONLINE:-0} == 1 ]] && echo 'Online: this app has no online module: offline play'
     export BB_ONLINE=0
 fi
 source scripts/launch_settings.sh
