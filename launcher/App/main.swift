@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         model.onExit = { [weak self] status in self?.gameEnded(status) }
         model.onLanguageChanged = { [weak self] in self?.buildMenu() }
         model.load()
+        model.removeGameIconFromBundle()
         buildMenu() // (launch.conf's language is known now)
         // --benchmark: show the window and run the benchmark at once (scripted comparisons).
         if CommandLine.arguments.contains("--benchmark") {
@@ -67,8 +68,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func showWindow(activate: Bool = true) {
         NSApp.setActivationPolicy(.regular)
-        // The new Dock tile shows the bundle's icon: the in-memory one again, if there is one.
-        if let icon = model?.dockIcon { NSApp.applicationIconImage = icon }
         if window == nil {
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: LauncherView.size),
                                   styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)

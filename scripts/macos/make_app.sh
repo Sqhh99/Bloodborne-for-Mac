@@ -7,8 +7,8 @@
 # to the newest). If the game stops with an error, the launcher shows a crash report and the log.
 #
 # The game window runs from inside the bundle (a link to out/bbgpu-host), so the Dock shows
-# "Bloodborne". The icon is made from your game's sce_sys/icon0.png, so the app is built
-# locally and never committed (Bloodborne.app is in .gitignore).
+# "Bloodborne". The app is built locally and never committed (Bloodborne.app is in .gitignore);
+# its icon is the app's own (make_icon.sh), and the game window shows the game's artwork.
 #
 # usage: bash scripts/macos/make_app.sh     (again after moving the repository)
 set -euo pipefail
@@ -53,31 +53,9 @@ install -m755 out/launcher/Bloodborne "$app/Contents/MacOS/Bloodborne"
 ln -s "$repo/out/bbgpu-host" "$app/Contents/MacOS/bbgpu-host"
 ln -s "$repo/out/bbgpu-host-macos27" "$app/Contents/MacOS/bbgpu-host-macos27"
 
-# Icon from the game's own artwork, when the game folder is known.
-game=
-if [[ -f launch.conf ]]; then game=$(set -a; source ./launch.conf; printf '%s' "${BB_GAME_DIR:-}"); fi
-[[ -z $game && -f ../CUSA03173/eboot.bin ]] && game=$(cd ../CUSA03173 && pwd)
-if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
-    set_dir=$(mktemp -d)/Bloodborne.iconset
-    mkdir -p "$set_dir"
-    # 256 and 512 pixels only: macOS 26/27 draw an old-style icon's own 16/32/128 images as a
-    # smaller square on a white plate (a white ring around it in Finder's list and small views).
-    # From the large images alone they scale it and round its corners like a native icon at
-    # every size (checked by rendering both at 32, 64 and 128 pixels, 2026-11-14).
-    for size in 256 512; do
-        sips -z $size $size "$game/sce_sys/icon0.png" --out "$set_dir/icon_${size}x${size}.png" >/dev/null
-        double=$((size * 2))
-        sips -z $double $double "$game/sce_sys/icon0.png" --out "$set_dir/icon_${size}x${size}@2x.png" >/dev/null
-    done
-    iconutil -c icns "$set_dir" -o "$app/Contents/Resources/Bloodborne.icns"
-    # The launcher and the game window then leave the Dock icon to the bundle (bundleShowsGameIcon).
-    /usr/libexec/PlistBuddy -c 'Add :BBGameIcon string 1' "$app/Contents/Info.plist"
-    rm -rf "$(dirname "$set_dir")"
-else
-    # Until the game folder is known: the release apps' own icon (the launcher shows the game's
-    # artwork in the Dock once it knows the folder; run this again for it in Finder too).
-    bash scripts/macos/make_icon.sh "$app/Contents/Resources/Bloodborne.icns"
-fi
+# The app's own icon, as in release apps (scripts/macos/make_icon.sh). The game's artwork is the
+# game window's only (gpu/shim/bbport_app_icon.mm): the launcher never uses it.
+bash scripts/macos/make_icon.sh "$app/Contents/Resources/Bloodborne.icns"
 # Sign the completed bundle: adding its icon or executable links after signing invalidates
 # the resource seal even though the launcher executable itself has not changed.
 codesign --force --sign - "$app"

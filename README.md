@@ -80,9 +80,9 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   sign-in, or a shadNet account), UPnP and the co-op port. Off by default; with it off the game
   never touches the network, and mods, cheats and patch files are switched off while it is on.
   Setup and troubleshooting: [docs/ONLINE.md](docs/ONLINE.md).
-- **Releases from CI** (`.github/workflows/build.yml`, `release.yml`), with the game's own icon
-  for the app once it knows your game folder, and the launcher hidden while you play (an option
-  under General).
+- **Releases from CI** (`.github/workflows/build.yml`, `release.yml`). The launcher has its own
+  gothic moon icon; the game window shows your game's icon. The launcher hides while you play
+  (an option under General).
 
 ## Downloads
 
@@ -94,7 +94,7 @@ is built in and stays off until you turn it on in the launcher's **Online** tab.
 It needs an Apple Silicon Mac with macOS 15 or newer, 16 GB of memory and your own game
 (below). The app is not notarised: unzip, move `Bloodborne.app` to Applications, run
 `xattr -dr com.apple.quarantine /Applications/Bloodborne.app`, open it and choose your game
-folder under **Locations**; the app then takes the game's icon. It updates itself
+folder under **Locations**. It updates itself
 (**Bloodborne → Check for Updates…**). Coming from 0.1.0 or 0.1.1: download the new version
 once by hand (your saves and settings stay). The PKG unpacker for preparing the game folder is
 inside the app ([docs/USAGE.md](docs/USAGE.md)). The app

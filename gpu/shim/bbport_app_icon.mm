@@ -9,7 +9,7 @@
 namespace BbAppIcon {
 namespace {
 
-// launcher/Model/AppIcon.swift's: Apple's icon grid (the 824 tile centred in a 1024 canvas),
+// Apple's icon grid (the 824 tile centred in a 1024 canvas),
 // a superellipse |x|^5 + |y|^5 = 1 for the continuous corners, and the template's shadow.
 constexpr int kCanvas = 1024;
 constexpr CGFloat kTile = 824;
@@ -71,17 +71,13 @@ void ApplyGameIcon() {
     if (!path || !path[0]) {
         return;
     }
-    // The bundle's own icon is already the game's (the launcher's custom icon, Icon\r, or a
-    // checkout app made from the game folder, BBGameIcon): the Dock then shows it from the start,
-    // and an in-memory copy, drawn differently, would show as the icon changing
-    // (LauncherModel.bundleShowsGameIcon).
-    NSBundle* bundle = NSBundle.mainBundle;
-    if ([bundle.infoDictionary[@"BBGameIcon"] isEqual:@"1"] ||
-        [NSFileManager.defaultManager fileExistsAtPath:[bundle.bundlePath stringByAppendingPathComponent:@"Icon\r"]]) {
-        return;
-    }
+    // The game window always shows the game's artwork, and only it does: the launcher keeps the
+    // app's own icon (LauncherModel.removeGameIconFromBundle). Set before SDL makes this a
+    // regular app, so its Dock tile starts with the game's icon instead of switching from the
+    // bundle's (the host runs inside the same bundle).
     NSString* file = [NSString stringWithUTF8String:path];
-    dispatch_async(dispatch_get_main_queue(), ^{
+    void (^apply)(void) = ^{
+        [NSApplication sharedApplication];
         NSImage* art = [[NSImage alloc] initWithContentsOfFile:file];
         if (!art) {
             std::printf("Window: no game icon at %s: the app's icon stays\n", file.UTF8String);
@@ -96,7 +92,12 @@ void ApplyGameIcon() {
             NSApp.applicationIconImage = art;
         }
         std::printf("Window: Dock icon from %s\n", file.UTF8String);
-    });
+    };
+    if ([NSThread isMainThread]) {
+        apply();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), apply);
+    }
 }
 
 } // namespace BbAppIcon
