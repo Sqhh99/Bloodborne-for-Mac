@@ -72,7 +72,9 @@ if [[ -n $game && -f $game/sce_sys/icon0.png ]]; then
     iconutil -c icns "$set_dir" -o "$app/Contents/Resources/Bloodborne.icns"
     rm -rf "$(dirname "$set_dir")"
 else
-    echo "No game folder known yet (launch.conf): the app has no icon. Run this again after the first launch."
+    # Until the game folder is known: the release apps' own icon (the launcher shows the game's
+    # artwork in the Dock once it knows the folder; run this again for it in Finder too).
+    bash scripts/macos/make_icon.sh "$app/Contents/Resources/Bloodborne.icns"
 fi
 # Sign the completed bundle: adding its icon or executable links after signing invalidates
 # the resource seal even though the launcher executable itself has not changed.

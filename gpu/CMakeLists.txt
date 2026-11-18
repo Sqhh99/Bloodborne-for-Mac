@@ -180,12 +180,14 @@ if (APPLE)
     enable_language(OBJCXX)
     target_sources(bbgpu PRIVATE shim/bbport_gpu_capture.mm)
     target_sources(bbgpu PRIVATE shim/bbport_cursor.mm)
+    # The game window's Dock icon from the game's artwork (shim/bbport_app_icon.h).
+    target_sources(bbgpu PRIVATE shim/bbport_app_icon.mm)
     # MetalFX temporal upscaling on native textures (shim/bbport_metalfx.h), used by the upscaler.
     target_sources(bbgpu PRIVATE shim/bbport_metalfx.mm)
     # The settings overlay's Metal side and ImGui's Metal backend (both ARC).
     target_sources(bbgpu PRIVATE shim/bbport_overlay_metal.mm
                    third_party/imgui/backends/imgui_impl_metal.mm)
-    set_source_files_properties(shim/bbport_gpu_capture.mm shim/bbport_cursor.mm shim/bbport_metalfx.mm
+    set_source_files_properties(shim/bbport_gpu_capture.mm shim/bbport_cursor.mm shim/bbport_app_icon.mm shim/bbport_metalfx.mm
                                 shim/bbport_overlay_metal.mm
                                 third_party/imgui/backends/imgui_impl_metal.mm
                                 PROPERTIES COMPILE_OPTIONS "-fobjc-arc")

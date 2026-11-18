@@ -52,6 +52,12 @@ if [[ ! -f $game/eboot.bin ]]; then echo "No eboot.bin in $game (set BB_GAME_DIR
 # Hooks and patches use the addresses of the 1.09 executable (BB_SKIP_GAME_CHECK=1 skips this).
 if ! "$PYTHON" scripts/game_check.py "$game" >&2; then exit 1; fi
 original_game=$game
+# The game window's Dock icon (gpu/shim/bbport_app_icon.mm): the player's own artwork, read at
+# run time only (release bundles carry scripts/macos/make_icon.sh's icon instead).
+if [[ -z ${BB_GAME_ICON:-} && -f $game/sce_sys/icon0.png ]]; then
+    BB_GAME_ICON=$(cd -- "$game/sce_sys" && pwd)/icon0.png
+    export BB_GAME_ICON
+fi
 mod_views=()
 cleanup_mod_views() {
     for view in "${mod_views[@]}"; do

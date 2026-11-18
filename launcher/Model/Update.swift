@@ -48,21 +48,28 @@ enum Updates {
         var assets: [Asset]
     }
 
-    /// The API's releases of `edition` newest version first, without drafts, tags that are not
-    /// v<numbers>[-test<n>]-<edition>, releases without that edition's zip
-    /// (Bloodborne-macOS-<version>-<edition>.zip) and (unless asked for) test builds: GitHub
-    /// pre-releases (each release is published as full or pre-release on purpose) and test tags.
+    /// The API's releases for `edition` newest version first: one release per version, tag
+    /// v<numbers>[-<suffix>], with both editions' zips (Bloodborne-macOS-<version>-<edition>.zip);
+    /// 0.1.0's form, one release per edition (tag v0.1.0-<edition>), is read too. Left out:
+    /// drafts, other tags (upstream's mac-v*), releases without this edition's zip and (unless
+    /// asked for) test builds: GitHub pre-releases (each release is published as full or
+    /// pre-release on purpose) and test tags.
     static func releases(json: Data, includeTestBuilds: Bool, edition: Edition) throws -> [ReleaseUpdate] {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         let found = try decoder.decode([Payload].self, from: json).compactMap { r -> ReleaseUpdate? in
-            guard r.draft != true, let split = Edition.split(tag: r.tagName), split.edition == edition,
-                  split.version.hasPrefix("v"), let version = ReleaseVersion(split.version) else { return nil }
+            guard r.draft != true else { return nil }
+            var versionTag = r.tagName
+            if let split = Edition.split(tag: r.tagName) {
+                guard split.edition == edition else { return nil }
+                versionTag = split.version
+            }
+            guard versionTag.hasPrefix("v"), let version = ReleaseVersion(versionTag) else { return nil }
+            let zipName = "Bloodborne-macOS-\(version.text)\(edition.tagSuffix).zip"
             let isTestBuild = r.prerelease == true || !version.isPlain
             guard includeTestBuilds || !isTestBuild,
                   let asset = r.assets.first(where: {
-                      $0.name.hasPrefix("Bloodborne-macOS-") && $0.name.hasSuffix("\(edition.tagSuffix).zip")
-                          && ($0.state ?? "uploaded") == "uploaded"
+                      $0.name == zipName && ($0.state ?? "uploaded") == "uploaded"
                   }) else { return nil }
             let title = r.name.flatMap { $0.isEmpty ? nil : $0 } ?? r.tagName
             return ReleaseUpdate(version: version, tag: r.tagName, title: title, notes: r.body ?? "",

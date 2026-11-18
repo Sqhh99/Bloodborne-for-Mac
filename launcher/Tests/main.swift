@@ -683,6 +683,29 @@ do {
     check(newest(nil) == "v0.5.2-singleplayer", "dev build: newest release")
     check((try? Updates.releases(json: Data("{\"message\":\"rate limited\"}".utf8), includeTestBuilds: false, edition: .singleplayer)) == nil, "API error is an error")
 
+    // From 0.1.1: one release per version (tag v<version>) with both editions' zips, beside
+    // 0.1.0's two releases (the form above).
+    func combined(_ tag: String, prerelease: Bool = false, editions: [Edition] = Edition.allCases) -> String {
+        let v = tag.dropFirst(1)
+        let assets = editions.map { e in
+            #"{"name":"Bloodborne-macOS-\#(v)-\#(e.rawValue).zip","size":2,"state":"uploaded","digest":null,"browser_download_url":"https://x/\#(v)-\#(e.rawValue).zip"}"#
+        }
+        return #"{"tag_name":"\#(tag)","name":"Bloodborne for Mac \#(v)","body":"","draft":false,"prerelease":\#(prerelease),"html_url":"https://github.com/o/r/releases/tag/\#(tag)","assets":[\#(assets.joined(separator: ","))]}"#
+    }
+    let current = Data(("[" + [combined("v0.2.0-test1", prerelease: true), combined("v0.1.2", editions: [.multiplayer]),
+                               combined("v0.1.1"), release("v0.1.0-multiplayer"), release("v0.1.0-singleplayer")]
+        .joined(separator: ",") + "]").utf8)
+    func offered(_ version: String, _ edition: Edition, tests: Bool = false) -> ReleaseUpdate? {
+        (try? Updates.newest(json: current, current: ReleaseVersion(version), includeTestBuilds: tests, edition: edition)) ?? nil
+    }
+    check(offered("0.1.0", .singleplayer)?.zip.absoluteString == "https://x/0.1.1-singleplayer.zip"
+          && offered("0.1.0", .singleplayer)?.tag == "v0.1.1", "one release per version: the single-player zip")
+    check(offered("0.1.0", .multiplayer)?.zip.absoluteString == "https://x/0.1.2-multiplayer.zip",
+          "the multiplayer zip; a release without this edition's zip is not offered to the other")
+    check(offered("0.1.1", .singleplayer) == nil && offered("0.1.1", .singleplayer, tests: true)?.tag == "v0.2.0-test1", "test builds when asked")
+    let both = ((try? Updates.releases(json: current, includeTestBuilds: false, edition: .singleplayer)) ?? []).map(\.tag)
+    check(both == ["v0.1.1", "v0.1.0-singleplayer"], "0.1.0's per-edition releases are read too: \(both)")
+
     let now = Date(timeIntervalSince1970: 2_000_000_000)
     check(Updates.isDue(last: nil, now: now) && Updates.isDue(last: now - Updates.interval, now: now), "due")
     check(!Updates.isDue(last: now - 3600, now: now) && Updates.isDue(last: now + 3600, now: now), "not due; clock set back")
