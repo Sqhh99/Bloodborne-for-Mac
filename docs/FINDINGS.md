@@ -2753,3 +2753,21 @@ that 90 authored frames still mean 3 s. All 28 patch tests pass; the runtime and
 GPU hosts build successfully. Diagnostic observers, warp controls, copied saves and captures
 remain in ignored `out/doll-repro`, outside the production runtime.
 
+## 2026-11-18: coherent keyboard and mouse attack input
+
+The host copied SDL's keyboard state on a separate 4 ms bridge while publishing mouse buttons
+from the window thread. A pad read could therefore combine a new mouse click with an older
+W/Shift state. The window now publishes both together after draining SDL events. Sequence-counter
+reads take a complete snapshot or retain the previous complete sample while the writer is busy.
+The game and host use shared protocol 15; Bloodborne's own attack handling is unchanged.
+
+Validation: the production pad fixture covers held movement followed by R2, fresh forward + R2
+in one read, held charge, release, capture loss, and a deliberately interrupted writer. Host
+tests pass on arm64 and x86-64, including 20,000 concurrent keyboard/mouse publications. The
+cross-process ring test passes between x86-64/Rosetta and arm64: 2,000,000 records without
+corruption, 500,000 events and 20,000 requests. `bash build_macos.sh` builds the runtime, both
+native host executables, both GPU libraries and the online module successfully.
+
+These tests verify the delivered inputs and shared-memory transport. No in-game comparison of
+Bloodborne's and Dark Souls III's jump-attack timing windows was performed.
+

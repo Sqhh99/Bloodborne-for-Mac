@@ -298,16 +298,11 @@ extern "C" int bbgpu_host_start(const BbGpuConfig* config, void* shared) {
         s->hdr_supported = presenter && presenter->IsHDRSupported() ? 1 : 0;
         PublishMacSettings(s);
         BbSplit::ForwardInterrupts();
-        // Keyboard for the game's pad emulation (input proper moves here in M5).
+        // Settings and text bridge. Keyboard/mouse buttons are published by the window thread,
+        // together after PollEvents, rather than polling SDL's keyboard on a second thread.
         std::thread([s] {
-            Common::SetCurrentThreadName("bb:KeyBridge");
+            Common::SetCurrentThreadName("bb:SettingsBridge");
             for (;;) {
-                int count = 0;
-                const bool* keys = SDL_GetKeyboardState(&count);
-                if (keys) {
-                    std::memcpy(s->keys, keys, std::min<size_t>(size_t(count), sizeof s->keys));
-                    __atomic_store_n(&s->keys_valid, 1u, __ATOMIC_RELEASE);
-                }
                 __atomic_store_n(&s->overlay_captures, BbOverlay::CapturesInput() ? 1u : 0u,
                                  __ATOMIC_RELAXED);
                 PublishMacSettings(s);
@@ -390,11 +385,15 @@ extern "C" void bbgpu_split_attach(void* shared, int host_pid) {
 }
 
 extern "C" const bool* bbgpu_split_keyboard(void) {
-    if (!BbSplit::Remote() || !__atomic_load_n(&BbSplit::Shared()->keys_valid, __ATOMIC_ACQUIRE)) {
+    if (!BbSplit::Remote()) {
         return nullptr;
     }
+    static thread_local BbGpuButtonSample sample{};
+    static thread_local bool valid = false;
+    if (bbgpu_buttons_read(&BbSplit::Shared()->button_input, &sample)) valid = true;
+    if (!valid) return nullptr;
     static_assert(sizeof(bool) == 1);
-    return reinterpret_cast<const bool*>(BbSplit::Shared()->keys);
+    return reinterpret_cast<const bool*>(sample.keys);
 }
 
 extern "C" uint32_t bbgpu_bench_frame_draws(void) {

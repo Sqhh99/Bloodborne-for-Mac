@@ -41,6 +41,7 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   | Camera | the mouse (turn on **Mouse camera**), or I J K L |
   | Dodge / run / jump | tap Space / hold Space / release and quickly press Space again while running |
   | Attack (R1) / charged attack (R2) | left click / ⇧ + left click, or the mouse's back button |
+  | Jump attack | start W and ⇧ + left click together, or W and the mouse's back button together |
   | Firearm (L2) / transform weapon (L1) | Left Ctrl, right click or ⇧ + right click / F, or the mouse's forward button |
   | Lock on (R3) | Q or middle click |
   | Interact, confirm (Cross) | E, Return |
@@ -51,6 +52,11 @@ memory. Expect occasional rendering glitches ([Known issues](#known-issues)).
   | Blood bullets (costs health) | 3 / ↑; deliberately not on the wheel |
   | Menu (Options) / gestures (touchpad) | Esc / G (right side: Delete ⌫) |
   | L3 | X |
+
+  For a jump attack, start moving forward at the same time as the heavy attack; Shift can
+  already be held. Keeping W held before attacking is a moving heavy attack. Hold R2's binding
+  for a charged attack. Keyboard and mouse buttons are sampled together, preserving the game's
+  native input timing.
 
   In the game's menus WASD and the arrows navigate, E or Return confirms, and Q, Space or Esc
   goes back; **the mouse points and clicks there too** (right button: back, wheel: up and down).
