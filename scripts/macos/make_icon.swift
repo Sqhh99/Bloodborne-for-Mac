@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// The app's own icon for release bundles (scripts/macos/make_icon.sh): an original drawing, a
-// pale crescent moon over a crimson night, made here so no game artwork is shipped (the game's
-// sce_sys/icon0.png is the player's, used only at run time and in checkout apps). Full-bleed
-// square like icon0.png: macOS rounds it as it does make_app.sh's icon.
+// The app's own icon (scripts/macos/make_icon.sh): an original drawing in a gothic-Victorian
+// mood, a pale moon in a misty blood-tinted night over a city of spires, made here so no game
+// artwork is shipped. The launcher always shows it; the game's sce_sys/icon0.png is the game
+// window's only (gpu/shim/bbport_app_icon.mm). Full-bleed square: macOS rounds it.
 //
 // usage: make_icon <out.png> <pixels>
 import AppKit
@@ -20,56 +20,136 @@ guard let ctx = CGContext(data: nil, width: size, height: size, bitsPerComponent
 func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColor {
     CGColor(colorSpace: space, components: [r / 255, g / 255, b / 255, a])!
 }
+func gradient(_ stops: [(CGFloat, CGColor)]) -> CGGradient {
+    CGGradient(colorsSpace: space, colors: stops.map(\.1) as CFArray, locations: stops.map(\.0))!
+}
+/// Points given in 0...1 units, y up.
+func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * s, y: y * s) }
+/// Deterministic pseudo-random numbers: the icon is the same at every build.
+var seed: UInt64 = 0x9E3779B97F4A7C15
+func random() -> CGFloat {
+    seed = seed &* 6364136223846793005 &+ 1442695040888963407
+    return CGFloat(seed >> 33) / CGFloat(UInt64(1) << 31)
+}
 
-// Night sky: crimson near the horizon, almost black at the top.
-let sky = CGGradient(colorsSpace: space, colors: [rgb(10, 4, 8), rgb(46, 6, 14), rgb(122, 14, 24)] as CFArray,
-                     locations: [0, 0.55, 1])!
-ctx.drawLinearGradient(sky, start: CGPoint(x: 0, y: s), end: CGPoint(x: 0, y: 0), options: [])
+// Night: blue-black above, a dim blood haze along the horizon.
+ctx.drawLinearGradient(gradient([(0, rgb(52, 14, 20)), (0.32, rgb(30, 12, 18)), (0.62, rgb(14, 12, 20)),
+                                 (1, rgb(7, 7, 12))]),
+                       start: p(0, 0), end: p(0, 1), options: [])
 
-// A few faint stars (fixed positions: the icon is the same at every build).
-let stars: [(CGFloat, CGFloat, CGFloat)] = [(0.16, 0.86, 0.006), (0.30, 0.74, 0.004), (0.82, 0.90, 0.005),
-                                            (0.90, 0.66, 0.004), (0.12, 0.60, 0.003), (0.64, 0.94, 0.003)]
-ctx.setFillColor(rgb(255, 236, 220, 0.75))
-for (x, y, r) in stars { ctx.fillEllipse(in: CGRect(x: x * s - r * s, y: y * s - r * s, width: 2 * r * s, height: 2 * r * s)) }
+// Faint stars in the upper sky.
+for _ in 0..<28 {
+    let x = random(), y = 0.62 + random() * 0.36, r = 0.0015 + random() * 0.0025
+    ctx.setFillColor(rgb(230, 220, 205, 0.25 + random() * 0.45))
+    ctx.fillEllipse(in: CGRect(x: (x - r) * s, y: (y - r) * s, width: 2 * r * s, height: 2 * r * s))
+}
 
-// The moon's glow, then the moon.
-let centre = CGPoint(x: 0.55 * s, y: 0.60 * s), radius = 0.25 * s
-let glow = CGGradient(colorsSpace: space, colors: [rgb(255, 214, 190, 0.35), rgb(255, 190, 170, 0.28), rgb(255, 120, 110, 0)] as CFArray,
-                      locations: [0, 0.35, 1])!
-// Centred on the lit side, so the cut-out part stays sky.
-let lit = CGPoint(x: centre.x - 0.35 * radius, y: centre.y - 0.05 * radius)
-ctx.drawRadialGradient(glow, startCenter: lit, startRadius: 0, endCenter: lit, endRadius: radius * 1.8,
-                       options: [])
-let moon = CGRect(x: centre.x - radius, y: centre.y - radius, width: 2 * radius, height: 2 * radius)
-// The shadowed part is cut out (the sky shows through): a crescent.
-let bite = 0.86 * radius
-let biteRect = CGRect(x: centre.x - bite + 0.42 * radius, y: centre.y - bite + 0.18 * radius,
-                      width: 2 * bite, height: 2 * bite)
+// The moon: large and pale, a warm bone white, with a wide blood-tinted halo.
+let moon = (x: CGFloat(0.58), y: CGFloat(0.63), r: CGFloat(0.215))
+let centre = p(moon.x, moon.y)
+ctx.drawRadialGradient(gradient([(0, rgb(232, 200, 180, 0.42)), (0.35, rgb(170, 70, 70, 0.20)),
+                                 (1, rgb(90, 20, 30, 0))]),
+                       startCenter: centre, startRadius: moon.r * s * 0.95, endCenter: centre,
+                       endRadius: moon.r * s * 2.6, options: [])
+let disc = CGRect(x: (moon.x - moon.r) * s, y: (moon.y - moon.r) * s, width: 2 * moon.r * s, height: 2 * moon.r * s)
 ctx.saveGState()
-ctx.addEllipse(in: moon)
+ctx.addEllipse(in: disc)
 ctx.clip()
-ctx.addRect(CGRect(x: 0, y: 0, width: s, height: s))
-ctx.addEllipse(in: biteRect)
-ctx.clip(using: .evenOdd)
-let face = CGGradient(colorsSpace: space, colors: [rgb(250, 240, 222), rgb(214, 196, 176)] as CFArray, locations: [0, 1])!
-ctx.drawRadialGradient(face, startCenter: CGPoint(x: centre.x - 0.3 * radius, y: centre.y + 0.3 * radius), startRadius: 0,
-                       endCenter: centre, endRadius: radius * 1.2, options: [.drawsAfterEndLocation])
+ctx.drawRadialGradient(gradient([(0, rgb(246, 238, 222)), (0.7, rgb(226, 212, 190)), (1, rgb(196, 168, 150))]),
+                       startCenter: p(moon.x - 0.06, moon.y + 0.06), startRadius: 0, endCenter: centre,
+                       endRadius: moon.r * s * 1.05, options: [.drawsAfterEndLocation])
+// Its maria: soft darker patches.
+let maria: [(CGFloat, CGFloat, CGFloat)] = [(-0.075, 0.035, 0.10), (0.085, -0.075, 0.075), (0.11, 0.075, 0.05)]
+for (dx, dy, r) in maria {
+    let c = p(moon.x + dx, moon.y + dy)
+    ctx.drawRadialGradient(gradient([(0, rgb(160, 136, 124, 0.22)), (1, rgb(160, 136, 124, 0))]),
+                           startCenter: c, startRadius: 0, endCenter: c, endRadius: r * s, options: [])
+}
 ctx.restoreGState()
 
-// A dark skyline of rooftops and spires along the bottom.
-ctx.setFillColor(rgb(8, 2, 5))
-let path = CGMutablePath()
-let roof: [(CGFloat, CGFloat)] = [(0, 0.20), (0.08, 0.20), (0.08, 0.26), (0.13, 0.33), (0.18, 0.26), (0.18, 0.22),
-                                  (0.27, 0.22), (0.27, 0.30), (0.30, 0.30), (0.32, 0.45), (0.34, 0.30), (0.37, 0.30),
-                                  (0.37, 0.24), (0.48, 0.24), (0.48, 0.28), (0.55, 0.34), (0.62, 0.28), (0.62, 0.21),
-                                  (0.70, 0.21), (0.70, 0.27), (0.73, 0.27), (0.75, 0.39), (0.77, 0.27), (0.80, 0.27),
-                                  (0.80, 0.19), (0.90, 0.19), (0.90, 0.24), (1, 0.24)]
-path.move(to: CGPoint(x: 0, y: 0))
-for (x, y) in roof { path.addLine(to: CGPoint(x: x * s, y: y * s)) }
-path.addLine(to: CGPoint(x: s, y: 0))
-path.closeSubpath()
-ctx.addPath(path)
-ctx.fillPath()
+// Thin clouds drifting across the moon's lower half.
+func cloud(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat, _ h: CGFloat, _ alpha: CGFloat) {
+    let path = CGMutablePath()
+    path.move(to: p(x0, y))
+    path.addCurve(to: p(x1, y + h * 0.3), control1: p(x0 + (x1 - x0) * 0.3, y + h), control2: p(x0 + (x1 - x0) * 0.7, y - h * 0.4))
+    path.addCurve(to: p(x0, y), control1: p(x0 + (x1 - x0) * 0.6, y - h * 0.9), control2: p(x0 + (x1 - x0) * 0.2, y - h * 0.5))
+    ctx.addPath(path)
+    ctx.setFillColor(rgb(20, 10, 16, alpha))
+    ctx.fillPath()
+}
+cloud(0.505, 0.26, 0.90, 0.04, 0.50)
+cloud(0.565, 0.52, 1.02, 0.022, 0.38)
+cloud(0.45, 0.02, 0.58, 0.028, 0.42)
+
+// A gothic skyline: rooftops, gables and spires.
+func skyline(_ parts: [(kind: Int, x: CGFloat, w: CGFloat, h: CGFloat)], base: CGFloat, colour: CGColor) {
+    let path = CGMutablePath()
+    path.move(to: p(0, 0))
+    path.addLine(to: p(0, base))
+    for part in parts {
+        let left = part.x - part.w / 2, right = part.x + part.w / 2
+        switch part.kind {
+        case 0: // a flat roof block
+            path.addLine(to: p(left, base)); path.addLine(to: p(left, base + part.h))
+            path.addLine(to: p(right, base + part.h)); path.addLine(to: p(right, base))
+        case 1: // a gable
+            path.addLine(to: p(left, base)); path.addLine(to: p(left, base + part.h * 0.6))
+            path.addLine(to: p(part.x, base + part.h)); path.addLine(to: p(right, base + part.h * 0.6))
+            path.addLine(to: p(right, base))
+        default: // a spire: a tower and a tall needle with two pinnacles
+            let tower = part.h * 0.45
+            path.addLine(to: p(left, base)); path.addLine(to: p(left, base + tower))
+            path.addLine(to: p(left - part.w * 0.12, base + tower))
+            path.addLine(to: p(left, base + tower + part.h * 0.10))
+            path.addLine(to: p(part.x, base + part.h))
+            path.addLine(to: p(right, base + tower + part.h * 0.10))
+            path.addLine(to: p(right + part.w * 0.12, base + tower))
+            path.addLine(to: p(right, base + tower)); path.addLine(to: p(right, base))
+        }
+    }
+    path.addLine(to: p(1, base))
+    path.addLine(to: p(1, 0))
+    path.closeSubpath()
+    ctx.addPath(path)
+    ctx.setFillColor(colour)
+    ctx.fillPath()
+}
+
+// Far city, in the haze.
+skyline([(1, 0.06, 0.08, 0.06), (2, 0.15, 0.035, 0.20), (0, 0.24, 0.09, 0.05), (2, 0.33, 0.03, 0.15),
+         (1, 0.42, 0.10, 0.07), (2, 0.74, 0.04, 0.22), (0, 0.84, 0.10, 0.06), (2, 0.93, 0.03, 0.16)],
+        base: 0.25, colour: rgb(46, 20, 30))
+// Mist between the far and the near city.
+ctx.drawLinearGradient(gradient([(0, rgb(120, 70, 80, 0.0)), (0.5, rgb(130, 80, 90, 0.22)), (1, rgb(120, 70, 80, 0.0))]),
+                       start: p(0, 0.20), end: p(0, 0.36), options: [])
+// Near city, black: a cathedral with a tall central spire.
+skyline([(1, 0.05, 0.10, 0.07), (0, 0.13, 0.06, 0.04), (2, 0.20, 0.05, 0.22), (1, 0.29, 0.09, 0.08),
+         (2, 0.40, 0.045, 0.30), (2, 0.50, 0.075, 0.52), (2, 0.60, 0.045, 0.30), (1, 0.70, 0.09, 0.08),
+         (0, 0.79, 0.07, 0.05), (2, 0.87, 0.045, 0.19), (1, 0.96, 0.08, 0.06)],
+        base: 0.12, colour: rgb(8, 5, 8))
+
+// A few dim lamplit windows.
+let windows: [(CGFloat, CGFloat)] = [(0.27, 0.16), (0.31, 0.155), (0.50, 0.22), (0.50, 0.28), (0.72, 0.16), (0.09, 0.145)]
+for (x, y) in windows {
+    let r = CGRect(x: (x - 0.006) * s, y: y * s, width: 0.012 * s, height: 0.02 * s)
+    ctx.setFillColor(rgb(214, 150, 80, 0.85))
+    ctx.fill(r)
+    let c = CGPoint(x: r.midX, y: r.midY)
+    ctx.drawRadialGradient(gradient([(0, rgb(220, 140, 70, 0.30)), (1, rgb(220, 140, 70, 0))]),
+                           startCenter: c, startRadius: 0, endCenter: c, endRadius: 0.03 * s, options: [])
+}
+
+// Vignette, then a fine grain.
+let middle = p(0.5, 0.55)
+ctx.drawRadialGradient(gradient([(0, rgb(0, 0, 0, 0)), (0.65, rgb(0, 0, 0, 0.10)), (1, rgb(0, 0, 0, 0.55))]),
+                       startCenter: middle, startRadius: 0, endCenter: middle, endRadius: s * 0.78,
+                       options: [.drawsAfterEndLocation])
+let grains = size * size / 220
+for _ in 0..<grains {
+    let x = random() * s, y = random() * s, light = random() > 0.5
+    ctx.setFillColor(light ? rgb(255, 240, 230, 0.035) : rgb(0, 0, 0, 0.06))
+    ctx.fill(CGRect(x: x, y: y, width: max(1, s / 512), height: max(1, s / 512)))
+}
 
 guard let image = ctx.makeImage(),
       let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { exit(1) }

@@ -88,6 +88,10 @@ u32 ChosenDisplay() {
 
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
     BbMouse::ConfigureInput();
+#ifdef __APPLE__
+    // The game window's own Dock icon, the game's artwork, before SDL makes this a regular app.
+    BbAppIcon::ApplyGameIcon();
+#endif
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         UNREACHABLE_MSG("Failed to initialize SDL video: {}", SDL_GetError());
@@ -132,8 +136,6 @@ WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}
     metal_view = SDL_Metal_CreateView(window);
     ASSERT_MSG(metal_view, "Failed to create Metal view: {}", SDL_GetError());
     window_info.render_surface = SDL_Metal_GetLayer(metal_view);
-    // The Dock shows this process too: the game's artwork, as the launcher shows it.
-    BbAppIcon::ApplyGameIcon();
 #else
     if (driver && !std::strcmp(driver, "x11")) {
         window_info.type = WindowSystemType::X11;

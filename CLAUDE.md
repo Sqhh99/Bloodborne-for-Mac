@@ -348,10 +348,11 @@ the live path (the startup patch breaks geometry there). Check screenshots when 
   when the module is missing (checkouts); run.sh forces `BB_ONLINE=0` then. CI:
   `.github/workflows/build.yml` (push/PR; deps/ and ccache cached), `release.yml` (tag
   `v<version>` or dispatch).
-- **Icons:** release bundles get `Resources/Bloodborne.icns` from `scripts/macos/make_icon.sh`
-  (an original drawing, never game artwork); the launcher and the game window
-  (`gpu/shim/bbport_app_icon.mm`, `BB_GAME_ICON`) set icon0.png in the Dock, and the launcher
-  sets it as the bundle's custom icon (`Icon\r`) once per installed copy (0.1.2).
+- **Icons (owner, 2026-11-18: kept apart):** the launcher/app always shows its own icon
+  (`Resources/Bloodborne.icns` from `scripts/macos/make_icon.sh`, an original drawing, never
+  game artwork; checkouts too); only the game window shows icon0.png
+  (`gpu/shim/bbport_app_icon.mm`, `BB_GAME_ICON`, set before SDL video init). The launcher
+  removes the game icon 0.1.2/0.1.3 set as the bundle's custom icon (`Icon\r`).
 - **Hide launcher while playing** is on by default (0.1.2; `BB_HIDE_LAUNCHER=0` keeps it shown).
 
 ## Next steps (in order)

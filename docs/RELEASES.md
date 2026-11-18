@@ -70,23 +70,16 @@ bash scripts/macos/package_app.sh 0.1.2     # dist/Bloodborne-macOS-0.1.2.zip
 
 ## Icons
 
-Release bundles carry the app's own icon, `Resources/Bloodborne.icns`, an original drawing made
-by `scripts/macos/make_icon.sh`: no game artwork is ever shipped. Once the launcher has checked
-the player's game folder it uses the game's own `sce_sys/icon0.png`:
-- in the Dock while it runs (in memory);
-- as the bundle's custom icon (`NSWorkspace.setIcon`, the bundle's `Icon\r` file, what Finder's
-  Get Info sets), so Finder, Launchpad and the Dock show it before launch too. Once per
-  installed copy: an update replaces the bundle and the next check sets it again;
-- the game window's process (`bbgpu-host`, a second Dock icon) sets it from `BB_GAME_ICON`
-  (run.sh; `gpu/shim/bbport_app_icon.mm`).
+Two icons, kept apart (owner, 2026-11-18):
+- **The launcher (the app) always has its own icon**, `Resources/Bloodborne.icns`, an original
+  drawing by `scripts/macos/make_icon.sh` (no game artwork is ever shipped): in Finder,
+  Launchpad, the Dock and window thumbnails, before and while it runs. A checkout's
+  `Bloodborne.app` (`make_app.sh`) uses the same icon.
+- **The game window** (`bbgpu-host`, its own Dock tile while playing) shows the game's
+  `sce_sys/icon0.png` from the player's game folder, never the app's icon: run.sh passes it as
+  `BB_GAME_ICON` and `gpu/shim/bbport_app_icon.mm` sets it before SDL makes the process a
+  regular app, so its tile starts with it.
 
-A checkout's `Bloodborne.app` (`make_app.sh`) makes its bundle icon from icon0.png when it knows
-the game folder (and says so in Info.plist, `BBGameIcon=1`).
-
-Once the bundle's own icon is the game's (a custom icon from an earlier launch, or
-`BBGameIcon`), neither the launcher nor the game window sets an icon in memory: every Dock tile
-(the launcher, the game window, the app when not running) shows the one registered icon. Before,
-the Dock switched between the bundle's icon and an in-memory copy at launch, when the game
-window opened, and when the game ended (the launcher, hidden as an accessory app while playing,
-gets a new Dock tile with the bundle's icon); an in-memory icon is now set again after each
-such switch (`AppDelegate.showWindow`).
+0.1.2 and 0.1.3 set the game's artwork as the bundle's custom icon (its `Icon\r` file); from
+0.1.4 the launcher removes such a custom icon at start (`LauncherModel.removeGameIconFromBundle`)
+and re-registers the app with LaunchServices.

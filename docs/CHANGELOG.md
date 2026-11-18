@@ -2,6 +2,18 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
+## 0.1.4: the launcher's icon and the game's, kept apart
+
+Notes for players: [releases/v0.1.4.md](releases/v0.1.4.md).
+
+- The launcher always shows the app's own icon, never the game's artwork: in Finder,
+  Launchpad, the Dock and window thumbnails (0.1.2 and 0.1.3 switched it to the game's). The
+  custom icon those versions put on the app is removed at the next start. A checkout's
+  `Bloodborne.app` uses the app's icon too.
+- The game window shows only the game's icon, set before its Dock tile appears.
+- A refined app icon: a pale moon in a misty, blood-tinted night over a city of spires, with
+  lamplit windows and a vignette (`scripts/macos/make_icon.swift`).
+
 ## 0.1.3: one download
 
 Notes for players: [releases/v0.1.3.md](releases/v0.1.3.md).

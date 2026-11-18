@@ -1354,40 +1354,16 @@ do {
     }
 }
 
-// Whether the bundle's own icon is already the game's: then nothing is set in memory, so the
-// Dock shows one icon throughout (it changed at launch and when the game ended).
+// The launcher's icon: a custom icon on the bundle (0.1.2/0.1.3 set the game's artwork as one) is
+// found, so the launcher can take it away.
 do {
     let fm = FileManager.default
     let app = fm.temporaryDirectory.appendingPathComponent("launcher-icon-\(getpid()).app")
     try? fm.createDirectory(at: app, withIntermediateDirectories: true)
-    check(!AppIcon.bundleShowsGameIcon(bundleURL: app, info: [:]), "a new download: its own icon")
-    check(AppIcon.bundleShowsGameIcon(bundleURL: app, info: ["BBGameIcon": "1"]), "checkout app made from the game folder")
+    check(!AppIcon.hasCustomIcon(bundleURL: app), "a new download: no custom icon")
     fm.createFile(atPath: app.appendingPathComponent("Icon\r").path, contents: Data())
-    check(AppIcon.bundleShowsGameIcon(bundleURL: app, info: [:]), "custom icon set by an earlier launch")
+    check(AppIcon.hasCustomIcon(bundleURL: app), "custom icon set by 0.1.2/0.1.3")
     try? fm.removeItem(at: app)
-}
-
-// The Dock icon: the square artwork on Apple's grid, rounded, transparent around the tile.
-do {
-    let side = 64
-    let red = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
-                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-    red.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-    red.fill(CGRect(x: 0, y: 0, width: side, height: side))
-    if let icon = AppIcon.rounded(red.makeImage()!), let data = icon.dataProvider?.data,
-       let bytes = CFDataGetBytePtr(data) {
-        func pixel(_ x: Int, _ y: Int) -> (r: UInt8, a: UInt8) {
-            let at = y * icon.bytesPerRow + x * 4
-            return (bytes[at], bytes[at + 3])
-        }
-        check(icon.width == 1024 && icon.height == 1024, "icon canvas 1024")
-        check(pixel(512, 512) == (255, 255), "icon artwork in the middle")
-        check(pixel(4, 4).a == 0 && pixel(1019, 4).a == 0, "icon margin transparent")
-        check(pixel(512, 104).a == 255 && pixel(512, 104).r == 255, "icon tile reaches its edge")
-        check(pixel(104, 104).r < 128, "icon corners rounded")
-    } else {
-        check(false, "icon made")
-    }
 }
 
 // Focus follows only this app's GPU host, whether packaged or a checkout symlink.

@@ -72,8 +72,8 @@ Once, in Terminal from the repository folder:
 bash scripts/macos/make_app.sh
 ```
 
-This creates **`Bloodborne.app`** in the repository folder, with the game's own icon (taken from
-your game folder, so the app is made on your Mac and never uploaded). Double-click it, or drag
+This creates **`Bloodborne.app`** in the repository folder (made on your Mac and never
+uploaded; the game window shows your game's own icon). Double-click it, or drag
 it to the Dock. It opens the same launcher window as the downloadable app (settings, game and
 save folders; see 0.4.0 in the [release history](CHANGELOG.md)), runs the game from this checkout without a Terminal
 window, and writes the game's logs to `~/Library/Logs/Bloodborne` (see [Logs](#logs)). If the
