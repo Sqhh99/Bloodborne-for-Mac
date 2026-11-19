@@ -8,8 +8,9 @@ retune the stick emulation first, then a time-boxed spike on direct camera contr
 
 The game reads a DualShock 4 (`scePadReadState`, `src/runtime_pad.c`). Gamepads are polled by
 SDL in bb-probe; the window, its keyboard and the mouse are in bbgpu-host, which publishes them
-in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_buttons`,
-`mouse_captured`, `mouse_wheel_up/down`). Keyboard and mouse add to the gamepad's state.
+in the shared block (`host/bbgpu_shared.h`). `button_input` contains the keyboard and mouse
+buttons from one completed event pump; `mouse_input` carries camera motion and wheel events.
+Keyboard and mouse add to the gamepad's state.
 
 ## Bindings (done, branch `input-bindings`)
 
@@ -66,6 +67,18 @@ in the shared block (`host/bbgpu_shared.h`: `keys[512]`, `mouse_vx/vy`, `mouse_b
   bindings do not count meanwhile (Shift + click is R2, not R2 and R1; Shift is no longer a
   sprint binding). `Keypad +` is one key (nothing follows its plus). The launcher's capture sheet binds a
   modifier when it is let go, or the chord when another key or a mouse button is pressed with it.
+- **Attack timing (2026-11-18):** keyboard and mouse buttons are published together by the window
+  thread after one SDL event pump (`BbMouse::PublishButtons`, `host/bbgpu_button_input.h`). They
+  previously came from a 4 ms keyboard bridge and a separate mouse publication, allowing a
+  click to be combined with an older W/Shift state. A bounded sequence-counter read now takes
+  one complete snapshot; if the writer is busy, the pad retains the previous complete snapshot
+  instead of briefly releasing movement or mixing input generations. The shared protocol is 15.
+  W is a held left-stick deflection and Shift + click is held R2 (without R1). A fresh forward
+  press plus R2 reaches the game in the same pad read, while an already held W stays held during
+  a heavy/charged attack. There are no synthetic stick releases, jump macros or added attack
+  delays. Bloodborne decides its jump-attack/charge timing; Dark Souls III's internal timing
+  window has not been measured or substituted. `test_attack_inputs` checks the actual pad path,
+  and `test_mouse_host.cpp` checks publication and concurrent keyboard/mouse consistency.
 - `camera_keys_dpad` (default 0 since the arrow keys are the d-pad by default; it was 1): while
   the mouse has the camera, keys bound to the camera press the d-pad instead.
 - **Not ported from bloodborne-mac:** its key-as-stick ramps (`key_stick`) and short-tap latch.

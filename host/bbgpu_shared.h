@@ -21,6 +21,7 @@
 #include <string.h>
 #include <time.h>
 #include "../gpu/bbmac_settings.h"
+#include "bbgpu_button_input.h"
 #include "bbgpu_mouse_input.h"
 #include "bbgpu_pointer_input.h"
 
@@ -37,7 +38,7 @@
 #define BBGPU_GUEST_MAX UINT64_C(0xfc00000000)
 
 #define BBGPU_SHARED_MAGIC 0x31424742u /* "BGB1" */
-#define BBGPU_SHARED_VERSION 14u /* 14: the pointer in game menus, button prompts */
+#define BBGPU_SHARED_VERSION 15u /* 15: coherent keyboard/mouse button snapshots */
 #define BBGPU_CONTROL_SIZE (UINT64_C(4) << 20) /* control block and rings */
 /* Command buffer copies (game side, at submit; the host parses these): the game may rewrite its
  * command buffers once the submit returns, before the host has parsed them. */
@@ -194,11 +195,11 @@ typedef struct {
     uint64_t label_address; /* VideoOut port buffer labels in the host (P3a) */
     uint64_t host_flips, host_submits;
     int32_t host_pid, game_pid;
-    /* Keyboard state of the host's window (SDL scancodes), refreshed by the host every few ms
-     * for the game's pad emulation; keys_valid once written. Input proper is M5. */
+    /* The version-14 keyboard fields stay reserved to preserve the following offsets.
+     * Keyboard and mouse buttons now travel together in button_input (below). */
     uint32_t keys_valid, overlay_captures; /* overlay_captures: the settings menu is open */
     uint8_t keys[512];
-    /* Host-owned settings, published before readiness and refreshed with keyboard state.
+    /* Host-owned settings, published before readiness and refreshed by the settings bridge.
      * Game-side menu reads use acquire loads, with no per-frame request/reply traffic. */
     int32_t mac_settings[BBMAC_COUNT];
     /* Text entry in the host window (IME dialog): text_state 0 typing, 1 confirmed, 2 cancelled;
@@ -244,6 +245,8 @@ typedef struct {
     /* The game's key guide icons (menu/common.tpf.dcx as the game opens it, a mod's copy
      * included): written by the game before the host starts. */
     char prompt_file[1024];
+    /* One snapshot per window event pump, not a separately polled keyboard and mouse. */
+    BBGPU_ALIGNAS(BBGPU_CACHE_LINE) BbGpuButtonInput button_input;
 } BbGpuShared;
 
 #define BBGPU_SUBMIT_RING_OFFSET (UINT64_C(64) << 10)

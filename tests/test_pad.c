@@ -465,6 +465,92 @@ static void test_mouse_response(void) {
     assert(x==128 && y==128);
 }
 
+#ifdef __APPLE__
+static BbGpuShared attack_shared;
+static void *attack_shared_address(void) { return &attack_shared; }
+static PadData attack_sample(const BbGpuButtonSample *input) {
+    bbgpu_buttons_publish(&attack_shared.button_input,input);
+    PadData data;
+    assert(pad_read_state(1,&data)==0);
+    return data;
+}
+
+/* Exercise the actual split-input -> Orbis pad path. These assertions describe the input
+ * sequence delivered to Bloodborne, not a claim about either game's animation/timing window. */
+static void test_attack_inputs(void) {
+    const int saved_keys=use_keys;
+    use_keys=0; capture=0;
+    runtime_bindings_load(NULL);
+    memset(&attack_shared,0,sizeof attack_shared);
+    runtime_pad_set_shared(attack_shared_address);
+    /* Inconsistent old fields must never be mixed into the coherent input. */
+    attack_shared.mouse_captured=1; attack_shared.mouse_buttons=SDL_BUTTON_LMASK;
+    PadData data;
+    assert(pad_read_state(1,&data)==0 && data.buttons==0 && data.left_y==128);
+    BbGpuButtonSample input={.mouse_captured=1};
+    input.keys[SDL_SCANCODE_LSHIFT]=1;
+    data=attack_sample(&input);
+    assert(data.buttons==0 && data.r2==0 && data.left_y==128); /* prepare Shift */
+    input.mouse_buttons=SDL_BUTTON_LMASK;
+    data=attack_sample(&input);
+    assert(data.buttons==BTN_R2 && data.r2==255 && data.left_y==128);
+    for (int frame=0;frame<90;++frame) {
+        assert(pad_read_state(1,&data)==0);
+        assert(data.buttons==BTN_R2 && data.r2==255 && data.left_y==128); /* held charge */
+    }
+    input.mouse_buttons=0;
+    data=attack_sample(&input);
+    assert(data.buttons==0 && data.r2==0);
+
+    /* Walk first, then heavy attack: never insert a neutral/new forward edge. */
+    input.keys[SDL_SCANCODE_W]=1;
+    data=attack_sample(&input);
+    assert(data.buttons==0 && data.left_y==0);
+    for (int frame=0;frame<10;++frame) {
+        assert(pad_read_state(1,&data)==0 && data.left_y==0 && data.r2==0);
+    }
+    input.mouse_buttons=SDL_BUTTON_LMASK;
+    data=attack_sample(&input);
+    assert(data.buttons==BTN_R2 && data.r2==255 && data.left_y==0);
+    /* A writer preempted midway through a copy must retain the previous complete sample.
+     * Otherwise its neutral axis would make a held W look like a new forward flick. */
+    __atomic_add_fetch(&attack_shared.button_input.sequence,1u,__ATOMIC_ACQ_REL);
+    __atomic_store_n(&attack_shared.button_input.value.keys[SDL_SCANCODE_W],0,__ATOMIC_RELAXED);
+    for (int frame=0;frame<8;++frame) {
+        assert(pad_read_state(1,&data)==0);
+        assert(data.buttons==BTN_R2 && data.r2==255 && data.left_y==0);
+    }
+    __atomic_store_n(&attack_shared.button_input.value.keys[SDL_SCANCODE_W],1,__ATOMIC_RELAXED);
+    __atomic_add_fetch(&attack_shared.button_input.sequence,1u,__ATOMIC_RELEASE);
+    input.mouse_buttons=0;
+    data=attack_sample(&input);
+    assert(data.buttons==0 && data.r2==0 && data.left_y==0); /* release only the attack */
+
+    /* A fresh forward + R2 reaches the game in the very same read (jump-attack gesture). */
+    input.keys[SDL_SCANCODE_W]=0;
+    data=attack_sample(&input);
+    assert(data.left_y==128 && data.buttons==0);
+    input.keys[SDL_SCANCODE_W]=1; input.mouse_buttons=SDL_BUTTON_LMASK;
+    data=attack_sample(&input);
+    assert(data.left_y==0 && data.buttons==BTN_R2 && data.r2==255);
+    input.mouse_buttons=SDL_BUTTON_X1MASK;
+    data=attack_sample(&input);
+    assert(data.left_y==0 && data.buttons==BTN_R2 && data.r2==255); /* alternative R2 binding */
+    input.mouse_buttons=SDL_BUTTON_LMASK; input.keys[SDL_SCANCODE_LSHIFT]=0;
+    data=attack_sample(&input);
+    assert(data.left_y==0 && data.buttons==BTN_R1 && data.r2==0); /* light attack is separate */
+
+    input.mouse_captured=0; input.keys[SDL_SCANCODE_LSHIFT]=1;
+    data=attack_sample(&input);
+    assert(data.left_y==0 && data.buttons==0 && data.r2==0); /* cursor released: no attack */
+    memset(&input,0,sizeof input);
+    data=attack_sample(&input);
+    assert(data.left_y==128 && data.buttons==0 && data.r2==0); /* focus lost */
+    runtime_pad_set_shared(NULL);
+    use_keys=saved_keys;
+}
+#endif
+
 static void test_wheel_pulses(void) {
     runtime_bindings_load(NULL);
     WheelPulse pulse={0};
@@ -640,6 +726,9 @@ int main(void) {
     test_menu_keys();
     test_menu_wheel_hover();
     test_mouse_response();
+#ifdef __APPLE__
+    test_attack_inputs();
+#endif
     test_wheel_pulses();
     test_launcher_tables();
     PadData data;

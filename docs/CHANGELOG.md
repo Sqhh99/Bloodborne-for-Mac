@@ -2,6 +2,15 @@
 
 What each release of the macOS port changed, newest first. Moved here from the README.
 
+## Unreleased
+
+- Keyboard movement, Shift and mouse buttons now reach the game as one coherent input sample.
+  This removes the mismatch between the separate keyboard and mouse updates for forward +
+  heavy-attack gestures. Held movement and charged attacks stay held across input updates.
+  The existing Dark Souls III-style bindings and Bloodborne's native attack handling remain.
+- Refine the code-drawn full-moon launcher icon with soft clouds, lunar texture, layered
+  rooftops, moonlit spires and pointed windows.
+
 ## 0.1.4: the launcher's icon and the game's, kept apart
 
 Notes for players: [releases/v0.1.4.md](releases/v0.1.4.md).

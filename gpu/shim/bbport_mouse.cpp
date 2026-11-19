@@ -57,6 +57,20 @@ void Publish(BbGpuShared* s, float vx, float vy) {
     __atomic_store_n(&s->mouse_captured, captured ? 1u : 0u, __ATOMIC_RELEASE);
 }
 
+// Called only after the window has drained its SDL events and updated cursor capture.
+// Publishing W, Shift and the click together preserves the native forward + R2 timing.
+void PublishButtons(BbGpuShared* s, const bool* keys, int count, bool focused) {
+    BbGpuButtonSample sample{};
+    if (focused) {
+        if (keys && count > 0) {
+            std::copy_n(keys, std::min<size_t>(size_t(count), sizeof sample.keys), sample.keys);
+        }
+        sample.mouse_captured = captured ? 1u : 0u;
+        sample.mouse_buttons = captured ? buttons : 0u;
+    }
+    bbgpu_buttons_publish(&s->button_input, &sample);
+}
+
 // The game's own menus (src/runtime_menu_pointer.c): while one is open the cursor is free and
 // points at its items. Where it is goes to the game in the stage's pixels (1920x1080, centred in
 // the frame shown and scaled by its height), with its clicks and wheel steps.
@@ -342,6 +356,9 @@ void Update(SDL_Window* window) {
     // hide another application's cursor while this game is in the background.
     SetCursorHidden(focused && !captured && !PointerWanted(s) && !BbOverlay::CapturesInput() &&
                     now - last_pointer_ns > IdleCursorNs);
+    int key_count = 0;
+    const bool* keys = SDL_GetKeyboardState(&key_count);
+    PublishButtons(s, keys, key_count, focused);
     if (!captured) {
         return;
     }

@@ -41,7 +41,50 @@ static BbGpuMouseSample Read() {
     assert(bbgpu_mouse_read(&block.mouse_input,&sample));
     return sample;
 }
+static void TestButtonSnapshots() {
+    bool keys[BBGPU_INPUT_KEYS]{};
+    keys[SDL_SCANCODE_W]=keys[SDL_SCANCODE_LSHIFT]=true;
+    BbMouse::captured=true; BbMouse::buttons=SDL_BUTTON_LMASK;
+    BbMouse::PublishButtons(&block,keys,BBGPU_INPUT_KEYS,true);
+    BbGpuButtonSample sample{};
+    assert(bbgpu_buttons_read(&block.button_input,&sample));
+    assert(sample.keys[SDL_SCANCODE_W] && sample.keys[SDL_SCANCODE_LSHIFT]);
+    assert(sample.mouse_buttons==SDL_BUTTON_LMASK && sample.mouse_captured);
+    // A short keyboard array is zero-padded; unfocused input is completely neutral.
+    BbMouse::PublishButtons(&block,keys,1,true);
+    assert(bbgpu_buttons_read(&block.button_input,&sample));
+    assert(!sample.keys[SDL_SCANCODE_W] && !sample.keys[SDL_SCANCODE_LSHIFT]);
+    BbMouse::PublishButtons(&block,keys,BBGPU_INPUT_KEYS,false);
+    assert(bbgpu_buttons_read(&block.button_input,&sample));
+    assert(!sample.keys[SDL_SCANCODE_W] && !sample.mouse_buttons && !sample.mouse_captured);
+
+    BbGpuButtonInput transport{};
+    sample.mouse_buttons=123;
+    assert(!bbgpu_buttons_read(&transport,&sample) && sample.mouse_buttons==123); // not published
+    std::atomic<bool> done{false};
+    std::thread writer([&] {
+        for (unsigned i=1;i<=20000;++i) {
+            BbGpuButtonSample next{};
+            const uint8_t bit=i&1;
+            for (auto& key : next.keys) key=bit;
+            next.mouse_buttons=bit ? SDL_BUTTON_LMASK : 0;
+            next.mouse_captured=bit;
+            bbgpu_buttons_publish(&transport,&next);
+        }
+        done.store(true,std::memory_order_release);
+    });
+    do {
+        if (bbgpu_buttons_read(&transport,&sample)) {
+            for (const auto key : sample.keys) assert(key==sample.mouse_captured);
+            assert(sample.mouse_buttons==(sample.mouse_captured ? SDL_BUTTON_LMASK : 0));
+        }
+    } while (!done.load(std::memory_order_acquire));
+    writer.join();
+    assert(bbgpu_buttons_read(&transport,&sample) && !sample.mouse_captured && !sample.mouse_buttons);
+    BbMouse::captured=false; BbMouse::buttons=0;
+}
 int main() {
+    TestButtonSnapshots();
     BbMouse::SetCursorHidden(true);
     assert(cursor_hidden && cursor_changes==1);
     BbMouse::SetCursorHidden(true);

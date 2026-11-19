@@ -18,6 +18,7 @@
 #include "runtime_text_input.h"
 #include "host/bbgpu_mouse_input.h"
 #include "host/bbgpu_pointer_input.h"
+#include "host/bbgpu_button_input.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,8 +112,11 @@ static SDL_Gamepad *current_gamepad(void) {
     return gamepad;
 }
 static int mouse_look_active(void);
-static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions);
+static uint32_t mouse_inputs(const bool *keys,const BbGpuButtonSample *buttons,uint64_t *wheel_actions);
 static void *(*pad_shared)(void);
+static const bool *keyboard_inputs(const BbGpuButtonSample **buttons);
+static BbGpuButtonSample button_sample;
+static int button_sample_valid;
 static int mouse_moving(void);
 /* A stick axis from two opposite keys: neutral 128, `reach` towards the held side (both: 127). */
 static uint8_t key_axis(int negative, int positive, int reach) {
@@ -326,8 +330,8 @@ static void sample_devices(PadData *d) {
     d->connected=1; d->connected_count=connected_count ? connected_count : 1;
     d->timestamp=now_us();
     SDL_Gamepad *g=current_gamepad();
-    const bool *k=bbgpu_split_keyboard(); /* the window is in the GPU host (split) */
-    if (!k) k=SDL_WasInit(SDL_INIT_VIDEO) ? SDL_GetKeyboardState(NULL) : NULL;
+    const BbGpuButtonSample *button_input=NULL;
+    const bool *k=keyboard_inputs(&button_input);
     /* Observe the dialog even while the overlay captures input: its closing key must stay
      * blocked after the overlay releases capture, until all typed keys have been released. */
     static int text_latch;
@@ -376,7 +380,7 @@ static void sample_devices(PadData *d) {
      * mouse button does comes from bbport.ini bind_ keys (runtime_bindings.c). */
     if (k && (k[SDL_SCANCODE_LGUI] || k[SDL_SCANCODE_RGUI])) k=NULL;
     uint64_t wheel_actions=0;
-    const uint32_t mouse=mouse_inputs(k,&wheel_actions);
+    const uint32_t mouse=mouse_inputs(k,button_input,&wheel_actions);
     if (!k && !mouse && !wheel_actions) { runtime_quick_items_input(0,0); dodge_was_down=0; prompt_note(g,pad_active,mouse_moving()); return; }
     const uint64_t held=runtime_bindings_held(k,mouse)|wheel_actions;
     prompt_note(g,pad_active,held!=0 || mouse_moving());
@@ -503,6 +507,24 @@ static inline void mouse_stick(double vx,double vy,uint8_t *x,uint8_t *y) {
  * Without one (the unit tests link the runtime without gpu_process.c) there is no mouse. */
 void runtime_pad_set_shared(void *(*shared)(void)) {
     pad_shared=shared; runtime_mouse_set_shared(shared); runtime_menu_pointer_set_shared(shared);
+    memset(&button_sample,0,sizeof button_sample); button_sample_valid=0;
+}
+/* The window publishes movement, modifiers and mouse buttons as one completed event pump.
+ * Holding W across reads keeps the same deflection; no synthetic release, jump macro, ramp or
+ * attack delay is added. Bloodborne still handles forward + R2 and charged attacks natively. */
+static const bool *keyboard_inputs(const BbGpuButtonSample **buttons) {
+    *buttons=NULL;
+#ifdef __APPLE__
+    const BbGpuShared *s=pad_shared ? (const BbGpuShared *)pad_shared() : NULL;
+    if (s) {
+        if (bbgpu_buttons_read(&s->button_input,&button_sample)) button_sample_valid=1;
+        if (!button_sample_valid) return NULL;
+        *buttons=&button_sample;
+        return (const bool *)button_sample.keys;
+    }
+#endif
+    const bool *keys=bbgpu_split_keyboard();
+    return keys ? keys : SDL_WasInit(SDL_INIT_VIDEO) ? SDL_GetKeyboardState(NULL) : NULL;
 }
 /* Mouse look is on when the Mouse camera setting is (bbport.ini mouse_look, read at start; the
  * launcher sets it) or while the host window holds the cursor (switched on in the in-game menu).
@@ -546,7 +568,7 @@ static void wheel_pulse(WheelPulse *pulse,const BbGpuMouseSample *input,uint64_t
         pulse->press_until=now+WHEEL_PRESS_US;
     }
 }
-static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions) {
+static uint32_t mouse_inputs(const bool *keys,const BbGpuButtonSample *buttons,uint64_t *wheel_actions) {
     *wheel_actions=0;
 #ifdef __APPLE__
     const BbGpuShared *s=pad_shared ? (const BbGpuShared *)pad_shared() : NULL;
@@ -555,16 +577,15 @@ static uint32_t mouse_inputs(const bool *keys,uint64_t *wheel_actions) {
     if (!s) return 0;
     BbGpuMouseSample next;
     if (bbgpu_mouse_read(&s->mouse_input,&next)) input=next;
-    const int enabled=__atomic_load_n(&s->mouse_captured,__ATOMIC_ACQUIRE) && !bbgpu_overlay_captures_input();
+    const int enabled=buttons && buttons->mouse_captured && !bbgpu_overlay_captures_input();
     wheel_pulse(&pulse,&input,now_us(),enabled && runtime_bindings_use_wheel());
     if (pulse.started) pulse.actions=runtime_bindings_wheel_actions(keys,
         pulse.direction>0 ? BIND_WHEEL_UP_MASK : BIND_WHEEL_DOWN_MASK);
     if (!enabled) return 0;
     if (pulse.direction) *wheel_actions=pulse.actions;
-    const uint32_t mouse=__atomic_load_n(&s->mouse_buttons,__ATOMIC_RELAXED) & 0xffu;
-    return mouse;
+    return buttons->mouse_buttons & 0xffu;
 #else
-    (void)keys;
+    (void)keys; (void)buttons;
     return 0;
 #endif
 }
