@@ -8,8 +8,14 @@ What each release of the macOS port changed, newest first. Moved here from the R
   This removes the mismatch between the separate keyboard and mouse updates for forward +
   heavy-attack gestures. Held movement and charged attacks stay held across input updates.
   The existing Dark Souls III-style bindings and Bloodborne's native attack handling remain.
-- Refine the code-drawn full-moon launcher icon with soft clouds, lunar texture, layered
-  rooftops, moonlit spires and pointed windows.
+- Replace the procedural launcher icon with original dark-gothic Bloodborne-style artwork
+  (a lone Victorian hunter beneath a crimson Blood Moon and Yharnam cathedral spires,
+  `scripts/macos/app_icon.png`, packaged via `scripts/macos/make_icon.sh`).
+- Launch the GPU host (`bbgpu-host` / `bbgpu-host-macos27`) through LaunchServices via
+  `Bloodborne.app`'s pre-AppKit trampoline (`--gpu-host-bootstrap`) instead of direct
+  `posix_spawn`, so macOS RunningBoard and Game Mode associate the game window with
+  `Bloodborne.app`'s bundle identifier and display the app icon in the Game Mode notification
+  banner (fixes blank Game Mode icon in both packaged and local checkout apps).
 
 ## 0.1.4: the launcher's icon and the game's, kept apart
 
