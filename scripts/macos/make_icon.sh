@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Builds the app's own icon (scripts/macos/app_icon.png: original gothic-Victorian hunter &
+# Builds the app's own icon (scripts/macos/app_icon.png: original gothic Astral Clocktower &
 # Blood Moon artwork, no game files) as an .icns. package_app.sh puts it in every release bundle;
 # make_app.sh uses it for local checkout apps. Only the 256 and 512 point images are included:
 # macOS 26/27 draw an icon's own 16/32/128 images as a smaller square on a white plate.

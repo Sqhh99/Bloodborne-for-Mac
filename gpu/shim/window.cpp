@@ -89,13 +89,18 @@ u32 ChosenDisplay() {
 WindowSDL::WindowSDL(s32 width_, s32 height_, const char* title) : width{width_}, height{height_} {
     BbMouse::ConfigureInput();
 #ifdef __APPLE__
-    // The game window's own Dock icon, the game's artwork, before SDL makes this a regular app.
-    BbAppIcon::ApplyGameIcon();
+    // Let SDL register SDL3Application, menus, and finishLaunching (required for Dock Quit /
+    // kAEQuitApplication and Cmd+Q) before ApplyGameIcon sets the game's Dock icon and switches
+    // to regular activation policy.
+    SDL_SetHint(SDL_HINT_MAC_BACKGROUND_APP, "1");
 #endif
     // Gamepads are sampled by runtime_pad.c; their events are pumped here with the window's.
     if (!SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         UNREACHABLE_MSG("Failed to initialize SDL video: {}", SDL_GetError());
     }
+#ifdef __APPLE__
+    BbAppIcon::ApplyGameIcon();
+#endif
     // bbport: a close request is handled in PollEvents (Cmd+W is ignored there), so SDL must not
     // turn it into a quit as well. Cmd+Q and the menu bar's Quit still send SDL_EVENT_QUIT.
     SDL_SetHint(SDL_HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0");

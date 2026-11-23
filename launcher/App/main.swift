@@ -67,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func showWindow(activate: Bool = true) {
+        let wasHidden = NSApp.activationPolicy() != .regular || NSApp.isHidden || window?.isVisible != true
         NSApp.setActivationPolicy(.regular)
         if window == nil {
             let window = NSWindow(contentRect: NSRect(origin: .zero, size: LauncherView.size),
@@ -78,8 +79,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             self.window = window
         }
         if activate {
+            NSApp.unhide(nil)
+            if window?.isMiniaturized == true { window?.deminiaturize(nil) }
             window?.makeKeyAndOrderFront(nil)
-            NSApp.activate()
+            NSApp.activate(ignoringOtherApps: true)
+            if wasHidden {
+                // Returning from .accessory (hidden while playing) and/or a full-screen Space
+                // exit: re-bring the window forward once AppKit applies the .regular policy.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                    guard let self, self.model == nil || !self.model.running else { return }
+                    self.window?.orderFrontRegardless()
+                    self.window?.makeKeyAndOrderFront(nil)
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
             model.checkForUpdatesIfDue()
         } else {
             window?.orderBack(nil)
