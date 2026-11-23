@@ -18,20 +18,25 @@
 #include "host/bbgpu_shared.h"
 #include <mach/mach_vm.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <limits.h>
 #include <mach-o/dyld.h>
 #include <mach/mach.h>
 #include <mach/notify.h>
+#include <poll.h>
 #include <pthread.h>
+#include <servers/bootstrap.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 #include <sys/sysctl.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -39,6 +44,7 @@
 extern char **environ;
 
 #define HANDSHAKE_TIMEOUT_MS 10000
+#define LAUNCH_CONNECT_TIMEOUT_MS 5000
 #define SEND_TIMEOUT_MS 2000
 #define FLUSH_MS 20 /* monitor tick */
 #define SAMPLE_BYTES (UINT64_C(256) * 1024)
@@ -46,6 +52,7 @@ extern char **environ;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static int alive;                  /* mirroring active (under mutex) */
 static pid_t host_pid;
+static int host_is_child;          /* 1: direct posix_spawn child (waitpid works); 0: LaunchServices */
 static mach_port_t host_port = MACH_PORT_NULL, ctl_port = MACH_PORT_NULL;
 static BbGpuShared *shared;        /* the control block (bbgpu_shared.h) */
 static mach_port_t shared_entry = MACH_PORT_NULL;
@@ -184,9 +191,11 @@ static void *receiver(void *unused) {
         } else if (in.m.h.msgh_id == MACH_NOTIFY_DEAD_NAME) {
             int status = 0;
             char why[96] = "host process exited";
-            if (waitpid(host_pid, &status, 0) == host_pid) {
+            if (host_is_child && waitpid(host_pid, &status, 0) == host_pid) {
                 if (WIFEXITED(status)) snprintf(why, sizeof why, "host process exited with status %d", WEXITSTATUS(status));
                 else if (WIFSIGNALED(status)) snprintf(why, sizeof why, "host process killed by signal %d", WTERMSIG(status));
+            } else if (shared && __atomic_load_n(&shared->host_state, __ATOMIC_ACQUIRE) == 4u) {
+                snprintf(why, sizeof why, "host process exited with status 0");
             }
             pthread_mutex_lock(&mutex);
             lost_locked(why);
@@ -235,8 +244,14 @@ static int receive(mach_port_t port, mach_msg_id_t id, InboxBuffer *in) {
         kern_return_t kr = mach_msg(&in->m.h, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0, sizeof *in, port, 100, MACH_PORT_NULL);
         if (kr == MACH_RCV_TIMED_OUT) {
             int status;
-            if (waitpid(host_pid, &status, WNOHANG) == host_pid) {
-                printf("GPU process: host exited during the handshake (status 0x%x)\n", status);
+            if (host_is_child) {
+                if (waitpid(host_pid, &status, WNOHANG) == host_pid) {
+                    printf("GPU process: host exited during the handshake (status 0x%x)\n", status);
+                    host_pid = 0;
+                    return -1;
+                }
+            } else if (host_pid > 0 && kill(host_pid, 0) != 0 && errno == ESRCH) {
+                printf("GPU process: host exited during the handshake\n");
                 host_pid = 0;
                 return -1;
             }
@@ -279,10 +294,193 @@ static int host_path(char *out, size_t size) {
     return 0;
 }
 
+static int env_allowed(const char *entry) {
+    /* Online secrets stay in this process: the host never talks to the network. */
+    static const char *const withheld[] = {"BBGPU_HANDSHAKE=", "BBGPU_HANDSHAKE_SERVICE=",
+                                           "BB_THD_TOKEN=", "BB_SHADNET_PASSWORD=",
+                                           "BB_SHADNET_TOKEN="};
+    for (size_t w = 0; w < sizeof withheld / sizeof *withheld; ++w)
+        if (!strncmp(entry, withheld[w], strlen(withheld[w]))) return 0;
+    return 1;
+}
+
+/* Enclosing .app bundle for a host binary in <bundle>/Contents/MacOS/bbgpu-host*. Returns 0 if
+ * found and the bundle has Info.plist + the Bloodborne launcher trampoline. */
+static int enclosing_app_bundle(const char *host, char *bundle, size_t size) {
+    const char *needle = "/Contents/MacOS/";
+    const char *hit = NULL, *scan = host;
+    while ((scan = strstr(scan, needle)) != NULL) {
+        hit = scan;
+        scan += strlen(needle);
+    }
+    if (!hit) return -1;
+    const size_t len = (size_t)(hit - host);
+    if (len < 5 || len >= size || memcmp(hit - 4, ".app", 4) != 0) return -1;
+    memcpy(bundle, host, len);
+    bundle[len] = 0;
+    char check[PATH_MAX];
+    snprintf(check, sizeof check, "%s/Contents/Info.plist", bundle);
+    if (access(check, R_OK) != 0) return -1;
+    snprintf(check, sizeof check, "%s/Contents/MacOS/Bloodborne", bundle);
+    if (access(check, X_OK) != 0) return -1;
+    return 0;
+}
+
+static int send_all(int fd, const void *buf, size_t len) {
+    const unsigned char *p = (const unsigned char *)buf;
+    while (len > 0) {
+        ssize_t n = send(fd, p, len, 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) return -1;
+        p += (size_t)n;
+        len -= (size_t)n;
+    }
+    return 0;
+}
+
+/* Launches Bloodborne.app via LaunchServices (`open -n -g`) so RunningBoard and macOS Game Mode
+ * associate bbgpu-host with Bloodborne.app's bundle ID and icon (instead of an anonymous process
+ * with bundleID=nil and a blank Game Mode notification icon). Bloodborne's trampoline connects to
+ * our private AF_UNIX socket, receives stdout/stderr and the sanitized environment, and execve()s
+ * bbgpu-host(-macos27) in the same LaunchServices PID. Returns 0 on success, -1 to fall back. */
+static int spawn_via_launch_services(const char *path, mach_port_t port) {
+    const char *override = getenv("BB_GPU_HOST_LAUNCH_SERVICES");
+    if (override && !strcmp(override, "0")) return -1;
+    char bundle[PATH_MAX];
+    if (enclosing_app_bundle(path, bundle, sizeof bundle) != 0) return -1;
+
+    name_t service;
+    snprintf(service, sizeof service, "io.github.wooloomooloo2.bloodborne-mac-port.gpu.%d.%08x",
+             (int)getpid(), arc4random());
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    kern_return_t kr = bootstrap_register(bootstrap_port, service, port);
+#pragma clang diagnostic pop
+    if (kr != KERN_SUCCESS) {
+        printf("GPU process: bootstrap_register failed (%s); falling back to direct spawn\n",
+               mach_error_string(kr));
+        return -1;
+    }
+
+    char dir[] = "/tmp/bbgpu-XXXXXX";
+    if (!mkdtemp(dir)) return -1;
+    char sock_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
+    snprintf(sock_path, sizeof sock_path, "%s/s", dir);
+
+    int srv = socket(AF_UNIX, SOCK_STREAM, 0);
+    int cli = -1, ok = 0;
+    char *payload = NULL;
+    if (srv < 0) goto cleanup;
+
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof addr);
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, sock_path, sizeof addr.sun_path - 1);
+    if (bind(srv, (struct sockaddr *)&addr, (socklen_t)(offsetof(struct sockaddr_un, sun_path) + strlen(sock_path) + 1)) != 0 ||
+        listen(srv, 1) != 0) {
+        goto cleanup;
+    }
+
+    posix_spawn_file_actions_t open_files;
+    posix_spawn_file_actions_init(&open_files);
+    posix_spawn_file_actions_addopen(&open_files, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_addopen(&open_files, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&open_files, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    char *open_argv[] = {"/usr/bin/open", "-n", "-g", bundle, "--args",
+                         "--gpu-host-bootstrap", sock_path, NULL};
+    pid_t open_pid = 0;
+    int rc = posix_spawn(&open_pid, "/usr/bin/open", &open_files, NULL, open_argv, environ);
+    posix_spawn_file_actions_destroy(&open_files);
+    if (rc != 0) {
+        printf("GPU process: /usr/bin/open failed (%s); falling back to direct spawn\n", strerror(rc));
+        goto cleanup;
+    }
+    int open_status = 0;
+    while (waitpid(open_pid, &open_status, 0) < 0 && errno == EINTR) {}
+    if (!WIFEXITED(open_status) || WEXITSTATUS(open_status) != 0) {
+        printf("GPU process: LaunchServices open exited with status 0x%x; falling back to direct spawn\n",
+               open_status);
+        goto cleanup;
+    }
+
+    struct pollfd pfd = {.fd = srv, .events = POLLIN};
+    int ready;
+    do { ready = poll(&pfd, 1, LAUNCH_CONNECT_TIMEOUT_MS); } while (ready < 0 && errno == EINTR);
+    if (ready <= 0) {
+        printf("GPU process: timed out waiting for app trampoline; falling back to direct spawn\n");
+        goto cleanup;
+    }
+    cli = accept(srv, NULL, NULL);
+    if (cli < 0) goto cleanup;
+    int one = 1;
+    setsockopt(cli, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+
+    uid_t peer_uid = 0;
+    gid_t peer_gid = 0;
+    if (getpeereid(cli, &peer_uid, &peer_gid) != 0 || peer_uid != geteuid()) goto cleanup;
+    pid_t peer_pid = 0;
+    socklen_t pid_len = sizeof peer_pid;
+    if (getsockopt(cli, SOL_LOCAL, LOCAL_PEERPID, &peer_pid, &pid_len) != 0 || peer_pid <= 0) goto cleanup;
+
+    char service_env[sizeof(name_t) + 32];
+    snprintf(service_env, sizeof service_env, "BBGPU_HANDSHAKE_SERVICE=%s", service);
+
+    size_t total = strlen(path) + 1 + strlen(service_env) + 1;
+    for (size_t i = 0; environ[i]; ++i)
+        if (env_allowed(environ[i])) total += strlen(environ[i]) + 1;
+    if (total > 512 * 1024) goto cleanup;
+    payload = malloc(total);
+    if (!payload) goto cleanup;
+    size_t pos = 0;
+    size_t n = strlen(path) + 1;
+    memcpy(payload + pos, path, n); pos += n;
+    for (size_t i = 0; environ[i]; ++i) {
+        if (!env_allowed(environ[i])) continue;
+        n = strlen(environ[i]) + 1;
+        memcpy(payload + pos, environ[i], n); pos += n;
+    }
+    n = strlen(service_env) + 1;
+    memcpy(payload + pos, service_env, n); pos += n;
+
+    uint32_t payload_len = (uint32_t)pos;
+    int fds[2] = {STDOUT_FILENO, STDERR_FILENO};
+    char cbuf[CMSG_SPACE(sizeof fds)];
+    memset(cbuf, 0, sizeof cbuf);
+    struct iovec iov = {.iov_base = &payload_len, .iov_len = sizeof payload_len};
+    struct msghdr msg;
+    memset(&msg, 0, sizeof msg);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = cbuf;
+    msg.msg_controllen = sizeof cbuf;
+    struct cmsghdr *cm = CMSG_FIRSTHDR(&msg);
+    cm->cmsg_level = SOL_SOCKET;
+    cm->cmsg_type = SCM_RIGHTS;
+    cm->cmsg_len = CMSG_LEN(sizeof fds);
+    memcpy(CMSG_DATA(cm), fds, sizeof fds);
+
+    ssize_t sent;
+    do { sent = sendmsg(cli, &msg, 0); } while (sent < 0 && errno == EINTR);
+    if (sent != (ssize_t)sizeof payload_len) goto cleanup;
+    if (send_all(cli, payload, pos) != 0) goto cleanup;
+
+    host_pid = peer_pid;
+    host_is_child = 0;
+    ok = 1;
+
+cleanup:
+    free(payload);
+    if (cli >= 0) close(cli);
+    if (srv >= 0) close(srv);
+    unlink(sock_path);
+    rmdir(dir);
+    return ok ? 0 : -1;
+}
+
 /* posix_spawn with port inherited through mach_ports_register (not the bootstrap special port:
  * libxpc caches it, and the host needs launchd/XPC for Metal and the window server). The
  * registration is restored right after, so later spawns don't inherit it. */
-static int spawn(const char *path, mach_port_t port) {
+static int spawn_direct(const char *path, mach_port_t port) {
     mach_port_array_t saved = NULL;
     mach_msg_type_number_t saved_count = 0;
     if (mach_ports_lookup(mach_task_self(), &saved, &saved_count) != KERN_SUCCESS) saved_count = 0;
@@ -297,21 +495,14 @@ static int spawn(const char *path, mach_port_t port) {
     posix_spawnattr_setbinpref_np(&attr, 1, &arm64, &set);
     char *argv[] = {(char *)path, NULL};
     /* BBGPU_HANDSHAKE tells the host the registered port is ours (registrations are inherited,
-     * so a host started by hand could otherwise find a stranger's port there). The online
-     * secrets stay in this process: the host never talks to the network. */
-    static const char *const withheld[] = {"BBGPU_HANDSHAKE=", "BB_THD_TOKEN=", "BB_SHADNET_PASSWORD=",
-                                           "BB_SHADNET_TOKEN="};
+     * so a host started by hand could otherwise find a stranger's port there). */
     size_t count = 0;
     while (environ[count]) ++count;
     char **envp = calloc(count + 2, sizeof *envp), marker[64];
     snprintf(marker, sizeof marker, "BBGPU_HANDSHAKE=%d", (int)getpid());
     size_t used = 0;
-    for (size_t i = 0; envp && i < count; ++i) {
-        int keep = 1;
-        for (size_t w = 0; w < sizeof withheld / sizeof *withheld; ++w)
-            if (!strncmp(environ[i], withheld[w], strlen(withheld[w]))) keep = 0;
-        if (keep) envp[used++] = environ[i];
-    }
+    for (size_t i = 0; envp && i < count; ++i)
+        if (env_allowed(environ[i])) envp[used++] = environ[i];
     if (envp) envp[used] = marker;
     int rc = ENOMEM;
     kern_return_t kr = mach_ports_register(mach_task_self(), &port, 1);
@@ -327,7 +518,19 @@ static int spawn(const char *path, mach_port_t port) {
     posix_spawnattr_destroy(&attr);
     if (kr != KERN_SUCCESS) { printf("GPU process: mach_ports_register: %s\n", mach_error_string(kr)); return -1; }
     if (rc) { printf("GPU process: cannot start %s: %s\n", path, strerror(rc)); host_pid = 0; return -1; }
+    host_is_child = 1;
     return 0;
+}
+
+static int spawn(const char *path, mach_port_t port) {
+    if (spawn_via_launch_services(path, port) == 0) return 0;
+    return spawn_direct(path, port);
+}
+
+static int host_still_alive(void) {
+    if (host_pid <= 0) return 0;
+    if (host_is_child) return waitpid(host_pid, NULL, WNOHANG) == 0;
+    return kill(host_pid, 0) == 0 || errno == EPERM;
 }
 
 /* SIGTERM, then SIGKILL if the host has not exited within 3 s (a stuck host may never get to
@@ -336,11 +539,11 @@ static int spawn(const char *path, mach_port_t port) {
 static void stop_host(void) {
     if (host_pid > 0) {
         kill(host_pid, SIGTERM);
-        for (int i = 0; i < 300 && waitpid(host_pid, NULL, WNOHANG) == 0; ++i) usleep(10000);
+        for (int i = 0; i < 300 && host_still_alive(); ++i) usleep(10000);
         if (kill(host_pid, 0) == 0) {
             kill(host_pid, SIGKILL);
             int i = 0;
-            while (i++ < 200 && waitpid(host_pid, NULL, WNOHANG) == 0) usleep(10000);
+            while (i++ < 200 && host_still_alive()) usleep(10000);
             if (i > 200) printf("GPU process: host %d did not exit after SIGKILL (stuck GPU?)\n", host_pid);
         }
         host_pid = 0;
@@ -402,8 +605,10 @@ void gpu_process_start(void) {
     int ok = !spawn(path, hs);
     /* 1. hello: the host's port arrives as the reply port */
     if (ok) ok = !receive(hs, BBGPU_MSG_HELLO, &in);
-    if (ok && (in.m.hello.version != BBGPU_PROTOCOL_VERSION || in.m.h.msgh_remote_port == MACH_PORT_NULL)) {
-        printf("GPU process: host protocol %u, expected %u\n", in.m.hello.version, BBGPU_PROTOCOL_VERSION);
+    if (ok && (in.m.hello.version != BBGPU_PROTOCOL_VERSION || in.m.h.msgh_remote_port == MACH_PORT_NULL ||
+               (host_pid > 0 && in.m.hello.pid != (uint32_t)host_pid))) {
+        printf("GPU process: host protocol %u (pid %u), expected %u (pid %d)\n", in.m.hello.version,
+               in.m.hello.pid, BBGPU_PROTOCOL_VERSION, (int)host_pid);
         mach_msg_destroy(&in.m.h);
         ok = 0;
     }

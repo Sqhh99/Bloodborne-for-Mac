@@ -71,10 +71,11 @@ bash scripts/macos/package_app.sh 0.1.2     # dist/Bloodborne-macOS-0.1.2.zip
 ## Icons
 
 Two icons, kept apart (owner, 2026-11-18):
-- **The launcher (the app) always has its own icon**, `Resources/Bloodborne.icns`, an original
-  drawing by `scripts/macos/make_icon.sh` (no game artwork is ever shipped): in Finder,
-  Launchpad, the Dock and window thumbnails, before and while it runs. A checkout's
-  `Bloodborne.app` (`make_app.sh`) uses the same icon.
+- **The launcher (the app) always has its own icon**, `Resources/Bloodborne.icns`, built from
+  original artwork (`scripts/macos/app_icon.png` via `scripts/macos/make_icon.sh`, no game
+  files are ever shipped): in Finder, Launchpad, the Dock, Game Mode notifications, and window
+  thumbnails, before and while it runs. A checkout's `Bloodborne.app` (`make_app.sh`) uses the
+  same icon.
 - **The game window** (`bbgpu-host`, its own Dock tile while playing) shows the game's
   `sce_sys/icon0.png` from the player's game folder, never the app's icon: run.sh passes it as
   `BB_GAME_ICON` and `gpu/shim/bbport_app_icon.mm` sets it before SDL makes the process a

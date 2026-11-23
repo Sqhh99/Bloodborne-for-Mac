@@ -134,6 +134,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 }
 
+// If launched by bb-probe as the GPU host wrapper, exec into bbgpu-host before AppKit starts.
+GpuHostBootstrap.execIfRequested(arguments: CommandLine.arguments)
+
 // Top-level code runs on the main thread; AppKit and the delegate are main-actor isolated.
 MainActor.assumeIsolated {
     let app = NSApplication.shared

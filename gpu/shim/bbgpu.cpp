@@ -553,6 +553,9 @@ static void OpenWindow(const BbGpuConfig* config) {
                 if (!static_cast<Frontend::WindowSDL*>(ctx)->PollEvents()) {
                     LOG_INFO(Frontend, "Window closed by user");
                     bbgpu_flush_caches(BBGPU_EXIT_FLUSH_MS);
+                    if (BbGpuShared* s = BbSplit::Shared()) {
+                        __atomic_store_n(&s->host_state, 4u, __ATOMIC_RELEASE);
+                    }
                     std::_Exit(0);
                 }
             },

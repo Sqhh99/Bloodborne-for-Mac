@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <mach/mach_vm.h>
 #include <mach/notify.h>
+#include <servers/bootstrap.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -61,6 +62,7 @@ static void finish(int code, const char *why) {
     say("exiting: %s", why);
     fflush(stdout);
     bbgpu_flush_caches(BBGPU_EXIT_FLUSH_MS);
+    if (code == 0 && g_shared) __atomic_store_n(&g_shared->host_state, 4u, __ATOMIC_RELEASE);
     _exit(code);
 }
 
@@ -240,22 +242,33 @@ static int translated(void) {
 }
 
 static int handshake(mach_port_t *parent) {
-    const char *marker = getenv("BBGPU_HANDSHAKE");
-    if (!marker || atoi(marker) != getppid()) {
-        say("not started by bb-probe (bb-probe starts it; run the game with run.sh)");
-        return -1;
+    const char *service = getenv("BBGPU_HANDSHAKE_SERVICE");
+    kern_return_t kr;
+    if (service && *service) {
+        kr = bootstrap_look_up(bootstrap_port, service, parent);
+        unsetenv("BBGPU_HANDSHAKE_SERVICE");
+        if (kr != KERN_SUCCESS || *parent == MACH_PORT_NULL) {
+            say("handshake service lookup failed: %s", mach_error_string(kr));
+            return -1;
+        }
+    } else {
+        const char *marker = getenv("BBGPU_HANDSHAKE");
+        if (!marker || atoi(marker) != getppid()) {
+            say("not started by bb-probe (bb-probe starts it; run the game with run.sh)");
+            return -1;
+        }
+        mach_port_array_t ports = NULL;
+        mach_msg_type_number_t n = 0;
+        kr = mach_ports_lookup(mach_task_self(), &ports, &n);
+        if (kr != KERN_SUCCESS || n < 1 || ports[0] == MACH_PORT_NULL) {
+            say("no handshake port inherited");
+            return -1;
+        }
+        *parent = ports[0];
+        for (mach_msg_type_number_t i = 1; i < n; ++i) if (ports[i]) mach_port_deallocate(mach_task_self(), ports[i]);
+        vm_deallocate(mach_task_self(), (vm_address_t)ports, n * sizeof *ports);
+        mach_ports_register(mach_task_self(), NULL, 0); /* not passed on to anything this spawns */
     }
-    mach_port_array_t ports = NULL;
-    mach_msg_type_number_t n = 0;
-    kern_return_t kr = mach_ports_lookup(mach_task_self(), &ports, &n);
-    if (kr != KERN_SUCCESS || n < 1 || ports[0] == MACH_PORT_NULL) {
-        say("no handshake port inherited");
-        return -1;
-    }
-    *parent = ports[0];
-    for (mach_msg_type_number_t i = 1; i < n; ++i) if (ports[i]) mach_port_deallocate(mach_task_self(), ports[i]);
-    vm_deallocate(mach_task_self(), (vm_address_t)ports, n * sizeof *ports);
-    mach_ports_register(mach_task_self(), NULL, 0); /* not passed on to anything this spawns */
 
     if (mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &host_port) != KERN_SUCCESS) return -1;
     BbGpuHello hello;

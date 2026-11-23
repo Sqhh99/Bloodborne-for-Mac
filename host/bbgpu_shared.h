@@ -190,7 +190,7 @@ typedef struct {
     uint64_t process_start_ns; /* CLOCK_MONOTONIC (system-wide) at the runtime's start */
     uint64_t tsc_hz;           /* guest rdtsc rate (Rosetta: cntvct_el0, 1 GHz on M4 Max) */
     /* Host facts: written by the host before it reports started (state 2). */
-    BBGPU_ALIGNAS(BBGPU_CACHE_LINE) uint32_t host_state; /* 0 idle, 1 start requested, 2 started, 3 failed (futex word) */
+    BBGPU_ALIGNAS(BBGPU_CACHE_LINE) uint32_t host_state; /* 0 idle, 1 start requested, 2 started, 3 failed, 4 clean exit (futex word) */
     uint32_t hdr_supported;
     uint64_t label_address; /* VideoOut port buffer labels in the host (P3a) */
     uint64_t host_flips, host_submits;
