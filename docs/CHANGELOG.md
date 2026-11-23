@@ -9,13 +9,18 @@ What each release of the macOS port changed, newest first. Moved here from the R
   heavy-attack gestures. Held movement and charged attacks stay held across input updates.
   The existing Dark Souls III-style bindings and Bloodborne's native attack handling remain.
 - Replace the procedural launcher icon with original dark-gothic Bloodborne-style artwork
-  (a lone Victorian hunter beneath a crimson Blood Moon and Yharnam cathedral spires,
+  (a gothic Astral Clocktower spire and astronomical dial beneath a crimson Blood Moon,
   `scripts/macos/app_icon.png`, packaged via `scripts/macos/make_icon.sh`).
 - Launch the GPU host (`bbgpu-host` / `bbgpu-host-macos27`) through LaunchServices via
   `Bloodborne.app`'s pre-AppKit trampoline (`--gpu-host-bootstrap`) instead of direct
   `posix_spawn`, so macOS RunningBoard and Game Mode associate the game window with
   `Bloodborne.app`'s bundle identifier and display the app icon in the Game Mode notification
   banner (fixes blank Game Mode icon in both packaged and local checkout apps).
+- Fix Dock right-click Quit (and Cmd+Q) being ignored by the game window: defer `ApplyGameIcon`
+  until right after `SDL_InitSubSystem` (with `SDL_HINT_MAC_BACKGROUND_APP=1`) so SDL registers
+  `SDL3Application`, its Quit menu and `finishLaunching` before setting the game's Dock icon.
+- Ensure the launcher reliably returns to the foreground after the game exits when "Hide while
+  playing" is enabled.
 
 ## 0.1.4: the launcher's icon and the game's, kept apart
 

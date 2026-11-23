@@ -68,30 +68,31 @@ CGImageRef Rounded(CGImageRef image) {
 
 void ApplyGameIcon() {
     const char* path = std::getenv("BB_GAME_ICON");
-    if (!path || !path[0]) {
-        return;
-    }
     // The game window always shows the game's artwork, and only it does: the launcher keeps the
-    // app's own icon (LauncherModel.removeGameIconFromBundle). Set before SDL makes this a
-    // regular app, so its Dock tile starts with the game's icon instead of switching from the
-    // bundle's (the host runs inside the same bundle).
-    NSString* file = [NSString stringWithUTF8String:path];
+    // app's own icon (LauncherModel.removeGameIconFromBundle). Called right after SDL_InitSubSystem
+    // (with SDL_HINT_MAC_BACKGROUND_APP=1) so SDL registers SDL3Application, menus and
+    // finishLaunching (needed for Dock Quit / Cmd+Q) before we set the Dock icon and make this a
+    // regular app.
+    NSString* file = (path && path[0]) ? [NSString stringWithUTF8String:path] : nil;
     void (^apply)(void) = ^{
-        [NSApplication sharedApplication];
-        NSImage* art = [[NSImage alloc] initWithContentsOfFile:file];
-        if (!art) {
-            std::printf("Window: no game icon at %s: the app's icon stays\n", file.UTF8String);
-            return;
+        NSApplication* app = NSApp ?: [NSApplication sharedApplication];
+        if (file) {
+            NSImage* art = [[NSImage alloc] initWithContentsOfFile:file];
+            if (!art) {
+                std::printf("Window: no game icon at %s: the app's icon stays\n", file.UTF8String);
+            } else {
+                CGImageRef square = [art CGImageForProposedRect:nullptr context:nil hints:nil];
+                CGImageRef rounded = square ? Rounded(square) : nullptr;
+                if (rounded) {
+                    app.applicationIconImage = [[NSImage alloc] initWithCGImage:rounded size:NSMakeSize(512, 512)];
+                    CGImageRelease(rounded);
+                } else {
+                    app.applicationIconImage = art;
+                }
+                std::printf("Window: Dock icon from %s\n", file.UTF8String);
+            }
         }
-        CGImageRef square = [art CGImageForProposedRect:nullptr context:nil hints:nil];
-        CGImageRef rounded = square ? Rounded(square) : nullptr;
-        if (rounded) {
-            NSApp.applicationIconImage = [[NSImage alloc] initWithCGImage:rounded size:NSMakeSize(512, 512)];
-            CGImageRelease(rounded);
-        } else {
-            NSApp.applicationIconImage = art;
-        }
-        std::printf("Window: Dock icon from %s\n", file.UTF8String);
+        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
     };
     if ([NSThread isMainThread]) {
         apply();
